@@ -1,3 +1,5 @@
+import atlas from "./atlas.json";
+
 // Define the interface for texture entries!
 interface textureEntry {
     readonly id: string,
@@ -8,14 +10,7 @@ interface textureEntry {
 }
 
 // All of them are defined here:
-const textureAtlas: textureEntry[] = [
-    {
-        id: "logo",
-        x: 0,
-        y: 0,
-        w: 218,
-        h: 34
-    }
-];
+// `atlas.json` contains the whole atlas!
+const textureAtlas: textureEntry[] = atlas;
 
 export default textureAtlas;
