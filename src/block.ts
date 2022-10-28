@@ -1,9 +1,12 @@
 enum Block {
-    BORDER,
+    BORDER = 0,
     AIR,
     GROUND,
     PLAYER,
-    FINISH
+    FINISH,
+    LAVA,
+    SPRING,
+    CHECKPOINT
 }
 
 const blockTable: {[key: string]: Block} = {
@@ -11,7 +14,10 @@ const blockTable: {[key: string]: Block} = {
     border: Block.BORDER,
     ground: Block.GROUND,
     player: Block.PLAYER,
-    finish: Block.FINISH
+    finish: Block.FINISH,
+    lava: Block.LAVA,
+    spring: Block.SPRING,
+    checkpoint: Block.CHECKPOINT
 };
 
 const COLLIDABLE = [

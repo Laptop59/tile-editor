@@ -20,7 +20,7 @@ module.exports = {
       },
       {
         test: /\.(mp3|wav|ogg)$/i,
-        loader: 'file-loader'
+        type: 'asset/resource'
       }
     ]
   },
