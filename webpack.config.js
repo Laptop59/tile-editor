@@ -6,7 +6,7 @@ module.exports = {
   module: {
     rules: [
       {
-        test: /\.tsx?$/,
+        test: /\.tsx?$/i,
         use: 'ts-loader',
         exclude: /node_modules/,
       },
@@ -17,6 +17,10 @@ module.exports = {
       {
         test: /\.(png|svg|jpg|jpeg|gif)$/i,
         type: 'asset/resource',
+      },
+      {
+        test: /\.(mp3|wav|ogg)$/i,
+        type: 'asset/resource'
       }
     ],
   },

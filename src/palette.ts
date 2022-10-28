@@ -1,14 +1,15 @@
 type Slot = string | null;
 
 const palette: [Slot, boolean][] = auto([
+    // Page 1
     "air",
     "ground",
     "player",
     "finish",
+    "lava",
+    "spring",
+    "checkpoint",
     null,
-    null,
-    //null,
-    //null
 ]);
 
 const onlyOnceArr = [

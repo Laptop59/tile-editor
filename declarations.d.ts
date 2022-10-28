@@ -1,3 +1,3 @@
 declare module '*.png';
 declare module '*.json';
-declare module '*.ogg';
+declare module '*.mp3';

@@ -5,7 +5,9 @@ import Block, {blockTable, COLLIDABLE} from "./block";
 import palette, {onlyOnce} from "./palette";
 
 // Sounds
-// import AUDIO_FINISH from "./finish.ogg";
+import SOUND_PLAY from "./audio/play.mp3";
+import SOUND_DIE from "./audio/die.mp3";
+import SOUND_FINISH from "./audio/finish.mp3";
 
 // Constants
 const WIDTH: number = 1280;
@@ -23,14 +25,17 @@ const DIMENSIONS = 9;
 const MAX_COLLIDES = 1000;
 const TOUCH_FRAC = 60/64;
 const FRICTION = 0.025;
-/* const AUDIO = {
-    "finish": AUDIO_FINISH
-}; */
+const SOUNDS: {[key: string]: string} = {
+    play: SOUND_PLAY,
+    die: SOUND_DIE,
+    finish: SOUND_FINISH
+};
+let ELEM_SOUNDS: {[key: string]: HTMLAudioElement} = {};
 
 let PLAYER_SIZE = 1;
 
 // Physics are run at 600 FPS!
-const GRAVITY = 0.03;
+const GRAVITY = 0.02;
 
 let canvas: HTMLCanvasElement;
 let ctx: CanvasRenderingContext2D;
@@ -51,12 +56,14 @@ let tileDimension: number = 0;
 
 let PLAYER_POS: [number, number] = [0, 0];
 let PLAYER_VEL: [number, number] = [0, 0];
+let PLAYER_SP: [number, number, number] = [0, 0, 0];
 
 let CAN_JUMP = false;
 
 // Make some custom things
 let REVERSE_GRAVITY = false;
 let JUMP_HEIGHT = 0.4;
+let SPRING_JUMP_HEIGHT = 0.575;
 
 let HELD: {[key: string]: boolean} = {
     left: false,
@@ -108,7 +115,12 @@ function init(): void {
 }
 
 function createAudios() {
-    
+    for (let id in SOUNDS) {
+        const sound = SOUNDS[id];
+        const elem = new Audio(sound);
+        ELEM_SOUNDS[id] = elem;
+        document.body.append(elem);
+    }
 }
 
 function click(e: MouseEvent) {
@@ -121,6 +133,16 @@ function click(e: MouseEvent) {
 function shouldLock(slot: number) {
     const name = palette[slot][0];
     return onlyOnce(name) && tilesContain(blockTable[name]);
+}
+
+function playSound(sound: string) {
+    const elem = ELEM_SOUNDS[sound];
+    if (elem)
+        if (elem.paused) {
+            elem.play();
+        } else {
+            elem.currentTime = 0;
+        }
 }
 
 function handleClick(x: number, y: number): void {
@@ -152,10 +174,17 @@ function handleClick(x: number, y: number): void {
     }
     if (tilesContain(Block.PLAYER) && x >= 105 && x <= 184 && y >= 547 && y <= 703) {
         if (isPlaying = !isPlaying) {
-            PLAYER_POS = [tilePosition(Block.PLAYER)[0], tilePosition(Block.PLAYER)[1]];
-            PLAYER_VEL = [0, 0];
+            playSound("play");
+            PLAYER_SP = tilePosition(Block.PLAYER);
+            resetPlayer();
         }
     }
+}
+
+function resetPlayer() {
+    PLAYER_POS = PLAYER_SP.slice(0, 2) as [number, number];
+    PLAYER_VEL = [0, 0];
+    tileDimension = PLAYER_SP[2];
 }
 
 function toSlotIndex(i: number): number {
@@ -202,21 +231,45 @@ function isColliding(): boolean {
         for (let y = -1; y <= 1; y++) {
             const ax = rx + x + 1, ay = ry + y + 1;
             const block = getTile(ax, ay);
-            switch (block) {
-                case Block.FINISH:
-                    // Stop playing!
-                    isPlaying = false;
-                    break;
-            }
+            const dx = PLAYER_POS[0] - ax + 1, dy = PLAYER_POS[1] - ay + 1;
+            const touching = Math.abs(dx) < PLAYER_SIZE*TOUCH_FRAC && Math.abs(dy) < PLAYER_SIZE*TOUCH_FRAC;
+
+            if (touching)
+                handleExtraThings(block, ax - 1, ay - 1);
+
             if (COLLIDABLE.includes(block)) {
-                const dx = PLAYER_POS[0] - ax + 1, dy = PLAYER_POS[1] - ay + 1;
-                if (Math.abs(dx) <= PLAYER_SIZE*TOUCH_FRAC && Math.abs(dy) <= PLAYER_SIZE*TOUCH_FRAC) {
+                if (touching) {
                     return true;
                 }
             }
         }
     }
     return false;
+}
+
+function handleExtraThings(block: Block, x?: number, y?: number) {
+    switch (block) {
+        case Block.FINISH:
+            // Stop playing!
+            isPlaying = false;
+            playSound("finish");
+            break;
+        case Block.LAVA:
+            // Die
+            resetPlayer();
+            playSound("die");
+            break;
+        case Block.SPRING:
+            PLAYER_VEL[1] = -SPRING_JUMP_HEIGHT;
+            break;
+        case Block.CHECKPOINT:
+            PLAYER_SP = [x, y, tileDimension];
+    }
+}
+
+function stuck() {
+    playSound("stuck");
+    isPlaying = false;
 }
 
 function doPhysics(dt: number) {
@@ -239,6 +292,9 @@ function doPhysics(dt: number) {
             if (!isPlaying) return;
             PLAYER_POS[0] -= Math.sign(PLAYER_VEL[0])/SIDE_LENGTH*0.5;
         }
+        if (j == 0) {
+            stuck();
+        }
         if (j < MAX_COLLIDES) PLAYER_VEL[0] = 0;
         //
         PLAYER_VEL[1] *= REVERSE_GRAVITY ? -1 : 1;
@@ -248,6 +304,9 @@ function doPhysics(dt: number) {
         while (isColliding() && j--) {
             if (!isPlaying) return;
             PLAYER_POS[1] -= Math.sign(PLAYER_VEL[1])/SIDE_LENGTH*0.5;
+        }
+        if (j == 0) {
+            stuck();
         }
         //
         PLAYER_VEL[1] *= REVERSE_GRAVITY ? -1 : 1;
@@ -293,7 +352,7 @@ function drawTexture(id: string, dx: number, dy: number, dw: number, dh: number)
 function drawTiles() {
     for (let y = 0; y < TILES_HEIGHT; y++) {
         for (let x = 0; x < TILES_WIDTH; x++) {
-            const texName = getTextureName(getTile(x, y));
+            const texName = getTextureName(getTile(x, y), x - 1, y - 1);
             if (!texName) continue;
             drawTexture(texName, x*SIDE_LENGTH + TOOLBOX_WIDTH, y*SIDE_LENGTH, SIDE_LENGTH, SIDE_LENGTH);
         }
@@ -397,7 +456,7 @@ function getTile(x: number, y: number): Block {
     return tiles[tileDimension][y - 1][x - 1];
 }
 
-function getTextureName(block: Block): null | string {
+function getTextureName(block: Block, x?: number, y?: number): null | string {
     const values = Object.values(blockTable);
     const name = "block_" + Object.keys(blockTable).find(
         (_, i) => values[i] == block
@@ -406,6 +465,15 @@ function getTextureName(block: Block): null | string {
         // Player block shouldn't be displayed when you are playing!
         // Air should not be drawn; no texture.
         return null;
+    }
+    if (isPlaying &&
+        name == "block_checkpoint" &&
+        PLAYER_SP[0] == x &&
+        PLAYER_SP[1] == y &&
+        PLAYER_SP[2] == tileDimension
+    ) {
+        // Return another one
+        return "block_checkpoint_done";
     }
     return name;
 }

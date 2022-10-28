@@ -7,3 +7,8 @@ body {
 canvas {
     position: absolute;
 }
+
+audio {
+    position: absolute;
+    visibility: none;
+}
