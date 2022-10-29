@@ -19,7 +19,7 @@ module.exports = {
         type: 'asset/resource',
       },
       {
-        test: /\.(mp3|wav|ogg)$/i,
+        test: /\.(mp3|wav|ogg|otf|ttf)$/i,
         type: 'asset/resource'
       }
     ],
