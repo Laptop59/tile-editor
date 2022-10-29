@@ -6,7 +6,8 @@ enum Block {
     FINISH,
     LAVA,
     SPRING,
-    CHECKPOINT
+    CHECKPOINT,
+    STAR
 }
 
 const blockTable: {[key: string]: Block} = {
@@ -17,7 +18,8 @@ const blockTable: {[key: string]: Block} = {
     finish: Block.FINISH,
     lava: Block.LAVA,
     spring: Block.SPRING,
-    checkpoint: Block.CHECKPOINT
+    checkpoint: Block.CHECKPOINT,
+    star: Block.STAR
 };
 
 const COLLIDABLE = [
@@ -25,8 +27,13 @@ const COLLIDABLE = [
     Block.GROUND
 ];
 
+const COLLECTIBLE = [
+    Block.STAR
+]
+
 export {
     Block as default,
     blockTable,
-    COLLIDABLE
+    COLLIDABLE,
+    COLLECTIBLE
 };

@@ -9,8 +9,9 @@ const palette: [Slot, boolean][] = auto([
     "lava",
     "spring",
     "checkpoint",
-    null,
-]);
+]).concat(manual([
+    "star",
+]));
 
 const onlyOnceArr = [
     "player"
