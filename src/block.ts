@@ -7,7 +7,16 @@ enum Block {
     LAVA,
     SPRING,
     CHECKPOINT,
-    STAR
+    STAR,
+    LEFT,
+    RIGHT,
+
+    HEXAGON,
+    HEXAGON_LOCK,
+    TRIANGLE,
+    TRIANGLE_LOCK,
+    CIRCLE,
+    CIRCLE_LOCK
 }
 
 const blockTable: {[key: string]: Block} = {
@@ -19,17 +28,33 @@ const blockTable: {[key: string]: Block} = {
     lava: Block.LAVA,
     spring: Block.SPRING,
     checkpoint: Block.CHECKPOINT,
-    star: Block.STAR
+    star: Block.STAR,
+    left: Block.LEFT,
+    right: Block.RIGHT,
+
+    hexagon: Block.HEXAGON,
+    hexagon_lock: Block.HEXAGON_LOCK,
+    triangle: Block.TRIANGLE,
+    triangle_lock: Block.TRIANGLE_LOCK,
+    circle: Block.CIRCLE,
+    circle_lock: Block.CIRCLE_LOCK
 };
 
 const COLLIDABLE = [
     Block.BORDER,
-    Block.GROUND
+    Block.GROUND,
+    
+    Block.HEXAGON_LOCK,
+    Block.TRIANGLE_LOCK,
+    Block.CIRCLE_LOCK
 ];
 
 const COLLECTIBLE = [
-    Block.STAR
-]
+    Block.STAR,
+    Block.HEXAGON,
+    Block.TRIANGLE,
+    Block.CIRCLE
+];
 
 export {
     Block as default,

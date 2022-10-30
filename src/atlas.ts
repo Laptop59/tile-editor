@@ -11,6 +11,10 @@ interface textureEntry {
 
 // All of them are defined here:
 // `atlas.json` contains the whole atlas!
-const textureAtlas: textureEntry[] = atlas;
+const textureAtlas: textureEntry[] = atlas.textures || [];
+const expandableAtlas: string[] = atlas.expandable || [];
 
-export default textureAtlas;
+export {
+    textureAtlas as default,
+    expandableAtlas
+}

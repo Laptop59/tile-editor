@@ -1,6 +1,9 @@
 type Slot = string | null;
 
-const palette: [Slot, boolean][] = auto([
+const palette: [Slot, boolean][] = []
+.concat(
+    ///
+auto([
     // Page 1
     "air",
     "ground",
@@ -9,9 +12,33 @@ const palette: [Slot, boolean][] = auto([
     "lava",
     "spring",
     "checkpoint",
-]).concat(manual([
+]),
+manual([
     "star",
-]));
+]),
+auto([
+    // Page 2
+
+    "left",
+    "right",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+]),
+auto([
+    "hexagon",
+    "hexagon_lock",
+    "triangle",
+    "triangle_lock",
+    "circle",
+    "circle_lock",
+    null,
+    null
+])
+);
 
 const onlyOnceArr = [
     "player"
