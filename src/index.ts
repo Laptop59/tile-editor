@@ -434,15 +434,23 @@ function handleExtraThings(block: Block, x?: number, y?: number) {
             collectTile(x, y, tileDimension, "current_squares", "max_squares");
             break;
         case Block.HEXAGON_IN:
+        case Block.HEXAGON_IN_LOCK:
+            if (block == Block.HEXAGON_IN_LOCK && (COUNTER.current_hexagons < COUNTER.max_hexagons)) return;
             teleportToOut("hexagon");
             break;
         case Block.TRIANGLE_IN:
+        case Block.TRIANGLE_IN_LOCK:
+            if (block == Block.TRIANGLE_IN_LOCK && (COUNTER.current_triangles < COUNTER.max_triangles)) return;
             teleportToOut("triangle");
             break;
         case Block.CIRCLE_IN:
+        case Block.CIRCLE_IN_LOCK:
+            if (block == Block.CIRCLE_IN_LOCK && (COUNTER.current_circles < COUNTER.max_circles)) return;
             teleportToOut("circle");
             break;
         case Block.SQUARE_IN:
+        case Block.SQUARE_IN_LOCK:
+            if (block == Block.SQUARE_IN_LOCK && (COUNTER.current_squares < COUNTER.max_squares)) return;
             teleportToOut("square");
             break;
         case Block.LEFT:
@@ -462,7 +470,10 @@ function showAlert(alert: string) {
 }
 
 function teleportToOut(type: string) {
-    const outs = tilePositions(blockTable[type + "_out"]);
+    const outs: [number, number, number][] = [].concat(
+        tilePositions(blockTable[type + "_out"]), 
+        (COUNTER["current_" + type + "s"] < COUNTER["max_" + type + "s"]) ? [] : tilePositions(blockTable[type + "_out_lock"])
+    );
     if (outs.length >= 1) {
         // We can teleport!
         // Choose a random 'out'.
@@ -577,7 +588,9 @@ function drawTexture(id: string, dx: number, dy: number, dw: number, dh: number,
             "lock": 1,
             "unlock": 2,
             "in": 3,
-            "out": 4
+            "out": 4,
+            "in_lock": 5,
+            "out_lock": 6
         }[id.split(".")[1]];
         ctx.drawImage(expandableTextureImg, type * 64, index * 64, 64, 64, dx, dy, dw, dh);
     } else if (f = expandableAtlas.find(o => "block_" + o == id)) {
@@ -590,6 +603,10 @@ function drawTexture(id: string, dx: number, dy: number, dw: number, dh: number,
         return drawTexture(f + ".in", dx, dy, dw, dh, true);
     } else if (f = expandableAtlas.find(o => "block_" + o + "_out" == id)) {
         return drawTexture(f + ".out", dx, dy, dw, dh, true);
+    } else if (f = expandableAtlas.find(o => "block_" + o + "_in_lock" == id)) {
+        return drawTexture(f + ".in_lock", dx, dy, dw, dh, true);
+    } else if (f = expandableAtlas.find(o => "block_" + o + "_out_lock" == id)) {
+        return drawTexture(f + ".out_lock", dx, dy, dw, dh, true);
     } else {
         const texture = textureAtlas.find(o => o.id == id);
         if (!texture) {
