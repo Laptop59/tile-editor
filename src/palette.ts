@@ -21,28 +21,32 @@ auto([
 
     "left",
     "right",
+    "gravity",
     null,
-    null,
-    null,
-    null,
+    "star_lock",
+    "star_unlock",
     null,
     null
 ]),
-auto([
-    "hexagon",
-    "hexagon_lock",
-    "triangle",
-    "triangle_lock",
-    "circle",
-    "circle_lock",
-    null,
-    null
-])
+...["hexagon", "triangle", "circle", "square"].map(newExpandablePack)
 );
 
 const onlyOnceArr = [
     "player"
 ];
+
+function newExpandablePack(str: string) {
+    return [
+        [str, true],
+        [null],
+        [str + "_lock", false],
+        [str + "_unlock", false],
+        [str + "_in", false],
+        [str + "_out", false],
+        [null],
+        [null]
+    ]
+}
 
 function onlyOnce(name: string) {
     return onlyOnceArr.indexOf(name) != -1;

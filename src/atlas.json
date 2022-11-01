@@ -84,6 +84,27 @@
             "w": 48,
             "h": 48
         },
+        {
+            "id": "load_container",
+            "x": 513,
+            "y": 193,
+            "w": 22,
+            "h": 12
+        },
+        {
+            "id": "load_down",
+            "x": 538,
+            "y": 193,
+            "w": 11,
+            "h": 14
+        },
+        {
+            "id": "load_up",
+            "x": 549,
+            "y": 193,
+            "w": 11,
+            "h": 14
+        },
 
         {
             "id": "block_border",
@@ -183,13 +204,48 @@
             "y": 64,
             "w": 64,
             "h": 64
+        },
+        {
+            "id": "block_star_lock",
+            "x": 512,
+            "y": 128,
+            "w": 64,
+            "h": 64
+        },
+        {
+            "id": "block_star_unlock",
+            "x": 512,
+            "y": 64,
+            "w": 64,
+            "h": 64
+        },
+        {
+            "id": "block_gravity_up",
+            "x": 512,
+            "y": 0,
+            "w": 64,
+            "h": 64
+        },
+        {
+            "id": "block_gravity_down",
+            "x": 576,
+            "y": 0,
+            "w": 64,
+            "h": 64
+        },
+        {
+            "id": "block_gravity",
+            "x": 576,
+            "y": 0,
+            "w": 64,
+            "h": 64
         }
     ],
     "expandable": [
         "hexagon",
         "triangle",
         "circle",
-        null,
+        "square",
         null,
         null,
         null,
