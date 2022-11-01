@@ -43,8 +43,8 @@ function newExpandablePack(str: string) {
         [str + "_unlock", false],
         [str + "_in", false],
         [str + "_out", false],
-        [null],
-        [null]
+        [str + "_in_lock", false],
+        [str + "_out_lock", false],
     ]
 }
 
