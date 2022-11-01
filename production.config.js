@@ -15,7 +15,7 @@ module.exports = {
         use: ['style-loader', 'css-loader'],
       },
       {
-        test: /\.(png|svg|jpg|jpeg|gif)$/i,
+        test: /\.(png|svg|jpg|jpeg|gif|ico)$/i,
         type: 'asset/resource',
       },
       {
@@ -26,7 +26,8 @@ module.exports = {
   },
   plugins: [
     new HtmlWebpackPlugin({
-        title: "Tile Editor"
+        title: "Tile Editor",
+        favicon: "./src/icons/favicon.ico"
     })
   ],
   resolve: {
