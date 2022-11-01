@@ -825,6 +825,10 @@ function getTextureName(block: Block, x?: number, y?: number): null | string {
             if (COUNTER["current_" + shape + "s"] >= COUNTER["max_" + shape + "s"]) return "block_" + shape + "_unlock";
         } else if (isPlaying && (shape = expandableAtlas.find(o => "block_" + o + "_unlock" == name))) {
             if (COUNTER["current_" + shape + "s"] >= COUNTER["max_" + shape + "s"]) return "block_" + shape + "_lock";
+        } else if (isPlaying && (shape = expandableAtlas.find(o => "block_" + o + "_in_lock" == name))) {
+            if (COUNTER["current_" + shape + "s"] >= COUNTER["max_" + shape + "s"]) return "block_" + shape + "_in";
+        } else if (isPlaying && (shape = expandableAtlas.find(o => "block_" + o + "_out_lock" == name))) {
+            if (COUNTER["current_" + shape + "s"] >= COUNTER["max_" + shape + "s"]) return "block_" + shape + "_out";
         }
     }
     return name;
