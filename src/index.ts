@@ -15,24 +15,27 @@ import SOUND_CHECKPOINT from "./audio/checkpoint.mp3";
 import SOUND_COLLECT from "./audio/collect.mp3";
 
 // Util
-import {handleKey, HELD, getParameter, or, SpawnInfo, copyToClipboard, convertToBlockCodes} from "./util";
+import {handleKey, HELD, getParameter, or, SpawnInfo, copyToClipboard, convertToBlockCodes, Level} from "./util";
 
 // Constants
 const WIDTH: number = 1280;
 const HEIGHT: number = 720;
 const ASPECT_RATIO: number = WIDTH / HEIGHT;
-const TOOLBOX_WIDTH: number = 288;
-const TILES_WIDTH: number = Math.max(+or(getParameter("width"), 22), 3);
-const TILES_HEIGHT: number = Math.max(+or(getParameter("height"), 16), 3);
-const SIDE_LENGTH = HEIGHT / TILES_HEIGHT;
+const EMBED = getParameter("embed") != undefined;
+const STARTNOW = getParameter("start") != undefined;
+const TOOLBOX_WIDTH: number = EMBED ? 0 : 288;
+const AUTOLOAD = getParameter("level");
+let TILES_WIDTH: number = Math.max(+or(getParameter("width"), 22), 3);
+let TILES_HEIGHT: number = Math.max(+or(getParameter("height"), 16), 3);
+let SIDE_LENGTH = HEIGHT / TILES_HEIGHT;
 const ICON_SIDE = 52;
 const SLOT_R = 42;
 const SLOTS_PER_PAGE = 8;
 const [LOCK_WIDTH, LOCK_HEIGHT] = [67, 100]
-const DIMENSIONS = Math.max(+getParameter("dimensions") || 4, 1);
+let DIMENSIONS = Math.max(+getParameter("dimensions") || 4, 1);
 const MAX_COLLIDES = 1000;
 const TOUCH_FRAC = 60 / 64;
-const FRICTION = +or(getParameter("friction"), 0.025);
+let FRICTION = +or(getParameter("friction"), 0.025);
 const SOUNDS: { [key: string]: string } = {
     play: SOUND_PLAY,
     die: SOUND_DIE,
@@ -45,6 +48,7 @@ const SOUNDS: { [key: string]: string } = {
 let ELEM_SOUNDS: { [key: string]: HTMLAudioElement } = {};
 
 let PLAYER_SIZE = 1;
+let justPause = false;
 
 // Physics are run at 600 FPS!
 const GRAVITY = +or(getParameter("gravity"), 0.02);
@@ -80,6 +84,11 @@ let REVERSE_GRAVITY = REVERSE_GRAVITY_START;
 let JUMP_HEIGHT = +or(getParameter("jump"), 0.4);
 let SPRING_JUMP_HEIGHT = +or(getParameter("spring_jump"), 0.575);
 let QUEUED_ALERTS: string[] = [];
+let CUSTOM_MAX: {[key: string]: number} = {};
+"star,hexagon,triangle,circle,square".split(",").forEach(v => {
+    const value = getParameter("max_" + v);
+    if (value) CUSTOM_MAX[v] = +value;
+});
 
 let COUNTER: { [key: string]: number } = {
     current_stars: 0,
@@ -98,8 +107,8 @@ function init(): void {
     canvas = document.createElement("canvas");
     canvas.innerText = "Canvas is not supported.";
     canvas.addEventListener("mousedown", click);
-    document.addEventListener("keydown", (e: KeyboardEvent) => handleKey(true, e));
-    document.addEventListener("keyup", (e: KeyboardEvent) => handleKey(false, e));
+    document.addEventListener("keydown", (e: KeyboardEvent) => restartLevel(handleKey(true, e)));
+    document.addEventListener("keyup", (e: KeyboardEvent) => restartLevel(handleKey(false, e)));
     createAudios();
 
     ctx = canvas.getContext("2d");
@@ -116,6 +125,11 @@ function init(): void {
 
     document.body.appendChild(canvas);
 
+    if (AUTOLOAD) loadLevel(AUTOLOAD);
+    if (EMBED || STARTNOW) {
+        initPlay();
+        resetPlayer();
+    }
     window.requestAnimationFrame(tick);
 }
 
@@ -173,7 +187,7 @@ function handleClick(x: number, y: number): void {
     } else if (!isPlaying && x >= 197 && x <= 232 && y >= 528 && y <= 576) {
         saveLevel();
     } else if (!isPlaying && x >= 247 && x <= 281 && y >= 528 && y <= 576) {
-        // Nothing for now.
+        loadLevel();
     }
     const touchingSlot = (() => {
         for (let i = 0; i < 4; i++) {
@@ -198,32 +212,66 @@ function handleClick(x: number, y: number): void {
 }
 
 function saveLevel() {
-    let level = {
+    let level: Level = {
         width: TILES_WIDTH,
         height: TILES_HEIGHT,
-        tiles: convertToBlockCodes(tiles)
+        tiles: convertToBlockCodes(tiles),
+        friction: FRICTION,
+        max: CUSTOM_MAX
     };
     copyToClipboard(JSON.stringify(level));
     showAlert("Code has been copied to your clipboard!");
 }
 
+function loadLevel(code?: string) {
+    if (!code) code = prompt("Put your level code:");
+    if (!code) return;
+    try {
+        const level: Level = JSON.parse(code);
+        TILES_WIDTH = Math.max(+or(level.width, 22), 3);
+        TILES_HEIGHT = Math.max(+or(level.height, 16), 3);
+        SIDE_LENGTH = HEIGHT / TILES_HEIGHT;
+        let codes = Object.keys(blockCodes);
+        let x = 0, y = 0, z = 0;
+        tiles = level.tiles.map((D: (string | number)[][]) => {
+            if (D === null) return Array(TILES_HEIGHT - 2).fill(void 0).map(() => Array(TILES_WIDTH - 2).fill(Block.AIR));
+            y = 0;
+            return D.map((Y: (string | number)[]) => {
+                x = 0;
+                return Y.map((t: string | number) => {
+                    if (t === 0) return Block.AIR;
+                    const id = codes.find(i => blockCodes[i] == t) || (()=>{
+                        throw new Error(`Invalid ID '${t}' found at ${x},${y},${z}`)
+                    })();
+                    x++;
+                    return blockTable[id];
+                })
+                y++;
+            })
+            z++;
+        });
+        DIMENSIONS = tiles.length;
+        FRICTION = +or(level.friction, 0.025);
+        CUSTOM_MAX = or(level.max, {});
+    } catch(e) {
+        alert("Level could not be loaded! More information in the logs can be found.");
+        console.error("Error while loading level:", e);
+    }
+}
+
 function initPlay() {
+    isPlaying = true;
     PLAYER_SP = {
         spawn: tilePosition(Block.PLAYER),
         reversed_gravity: REVERSE_GRAVITY_START
     };
+    setupTiles(true);
 
     // COUNTER settings
-    COUNTER.current_stars = 0;
-    COUNTER.max_stars = tilesCount(Block.STAR);
-    COUNTER.current_hexagons = 0;
-    COUNTER.max_hexagons = tilesCount(Block.HEXAGON);
-    COUNTER.current_triangles = 0;
-    COUNTER.max_triangles = tilesCount(Block.TRIANGLE);
-    COUNTER.current_circles = 0;
-    COUNTER.max_circles = tilesCount(Block.CIRCLE);
-    COUNTER.current_squares = 0;
-    COUNTER.max_squares = tilesCount(Block.SQUARE);
+    "star,hexagon,triangle,circle,square".split(",").forEach(v => {
+        COUNTER["current_" + v + "s"] = 0;
+        COUNTER["max_" + v + "s"] = +or(CUSTOM_MAX[v], tilesCount(blockTable[v]));
+    });
 }
 
 function resetPlayer() {
@@ -270,7 +318,7 @@ function tick(): void {
     drawRect(0, 0, TOOLBOX_WIDTH, HEIGHT, "#505050");
 
     drawTiles();
-    drawToolbox();
+    if (!EMBED) drawToolbox();
     drawCounters();
 
     showAlerts();
@@ -400,7 +448,14 @@ function handleExtraThings(block: Block, x?: number, y?: number) {
             // Well, only if the finish is unlocked :)
             if (!(COUNTER.max_stars == 0 || COUNTER.current_stars >= COUNTER.max_stars)) return;
             // Stop playing!
-            stopPlaying();
+            if (EMBED) {
+                justPause = true;
+                if (confirm("Congratulations! You finished the level! Would you like to play again?")) {
+                    justPause = false;
+                    initPlay();
+                    resetPlayer();
+                }
+            } else stopPlaying();
             playSound("finish");
             break;
         case Block.LAVA:
@@ -488,7 +543,7 @@ function collectTile(x: number, y: number, z: number, current: string, max: stri
         COUNTER[current]++;
         collectedTiles[z][y][x] = true;
         playSound("collect");
-        if (COUNTER[current] >= COUNTER[max]) playSound("all_collected");
+        if (COUNTER[current] == COUNTER[max]) playSound("all_collected");
     }
 }
 
@@ -508,7 +563,7 @@ function stuck() {
 }
 
 function doPhysics(dt: number) {
-    if (!isPlaying) return;
+    if (!isPlaying || justPause) return;
     const frames = Math.max(Math.ceil(dt * 6), 1); // 1+ frames
     for (let i = 0; i < frames; i++) {
         PLAYER_VEL[1] += GRAVITY;
@@ -570,6 +625,13 @@ function setCanvas(): void {
     X_OFFSET = (window.innerWidth - S_WIDTH) / 2;
     canvas.style.top = Y_OFFSET + "px";
     canvas.style.left = X_OFFSET + "px";
+}
+
+function restartLevel(reset: boolean) {
+    if (reset) {
+        initPlay();
+        resetPlayer();
+    }
 }
 
 function drawRect(x: number, y: number, w: number, h: number, color: string) {

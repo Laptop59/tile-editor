@@ -10,8 +10,9 @@ let HELD: { [key: string]: boolean } = {
  * Edits the HELD object.
  * @param down If the key was pressed down (and not up)
  * @param e The keyboard event.
+ * @returns If the level should reset
  */
-function handleKey(down: boolean, e: KeyboardEvent) {
+function handleKey(down: boolean, e: KeyboardEvent): boolean {
     switch (e.key) {
         case "a":
         case "ArrowLeft":
@@ -29,7 +30,19 @@ function handleKey(down: boolean, e: KeyboardEvent) {
         case " ":
         case "Spacebar":
             HELD.up = down;
+            break;
+        case "r":
+            return true;
     }
+    return false;
+}
+
+interface Level {
+    width: number,
+    height: number,
+    tiles: (string | number)[][][],
+    friction?: number,
+    max?: {[key: string]: number}
 }
 
 /**
@@ -89,5 +102,6 @@ export {
     or,
     SpawnInfo,
     copyToClipboard,
-    convertToBlockCodes
+    convertToBlockCodes,
+    Level
 }
