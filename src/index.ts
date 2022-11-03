@@ -105,6 +105,7 @@ let SPRING_JUMP_HEIGHT = +or(getParameter("spring_jump"), 0.575);
 let QUEUED_ALERTS: string[] = [];
 let CUSTOM_MAX: {[key: string]: number} = {};
 let EXTRA_COUNTERS: string[] = [];
+let EXTRA_COUNTERS_INFO: {[key: string]: CounterInfo} = {};
 
 let COUNTER: { [key: string]: number } = {
     "": 0,
@@ -318,7 +319,9 @@ function initPlay() {
     // COUNTER settings
     for (let v of COUNTERS.concat(EXTRA_COUNTERS)) {
         COUNTER["current_" + v + "s"] = 0;
-        COUNTER["max_" + v + "s"] = +or(CUSTOM_MAX[v], tilesCount(blockTable[v]));
+        let max = EXTRA_COUNTERS_INFO[v]?.getMax;
+        if (typeof max === "function") max = max();
+        COUNTER["max_" + v + "s"] = +or(or(CUSTOM_MAX[v], max), tilesCount(blockTable[v]));
     };
 }
 
@@ -385,20 +388,29 @@ function showAlerts() {
 function drawCounters(): void {
     let c = 0;
     if (isPlaying ? (COUNTER.max_stars > 0) : tilesContain(Block.STAR))
-        drawCounter("star", Block.STAR, "current_stars", "max_stars", "#ffffcc", "#444400");
+        drawCounter("block_star", Block.STAR, "current_stars", "max_stars", "#ffffcc", "#444400");
     if (isPlaying ? (COUNTER.max_hexagons > 0) : tilesContain(Block.HEXAGON))
-        drawCounter("hexagon", Block.HEXAGON, "current_hexagons", "max_hexagons", "#ffcccc", "#440000");
+        drawCounter("block_hexagon", Block.HEXAGON, "current_hexagons", "max_hexagons", "#ffcccc", "#440000");
     if (isPlaying ? (COUNTER.max_triangles > 0) : tilesContain(Block.TRIANGLE))
-        drawCounter("triangle", Block.TRIANGLE, "current_triangles", "max_triangles", "#ccd3d3ff", "#000044");
+        drawCounter("block_triangle", Block.TRIANGLE, "current_triangles", "max_triangles", "#ccd3d3ff", "#000044");
     if (isPlaying ? (COUNTER.max_circles > 0) : tilesContain(Block.CIRCLE))
-        drawCounter("circle", Block.CIRCLE, "current_circles", "max_circles", "#ccffcc", "#004400");
+        drawCounter("block_circle", Block.CIRCLE, "current_circles", "max_circles", "#ccffcc", "#004400");
     if (isPlaying ? (COUNTER.max_squares > 0) : tilesContain(Block.SQUARE))
-        drawCounter("square", Block.SQUARE, "current_squares", "max_squares", "#ffd7cc", "#442700");
+        drawCounter("block_square", Block.SQUARE, "current_squares", "max_squares", "#ffd7cc", "#442700");
+    for (let counter of EXTRA_COUNTERS) {
+        let e = EXTRA_COUNTERS_INFO[counter];
+        const np = e.showCounter?.(isPlaying);
+        let max = e?.getMax;
+        if (typeof max === "function") max = max();
 
-    function drawCounter(name: string, block: Block, CURRENT: string, MAX: string, colour: string, dark_colour: string) {
+        if (e.shown && (isPlaying ? (typeof np !== "undefined" ? np : COUNTER["max_" + counter + "s"] > 0) : (typeof np !== "undefined" ? np : tilesContain(blockTable[counter])) ))
+            drawCounter(e.icon || "block" + counter, blockTable[counter], "current_" + counter + "s", "max_" + counter + "s", e.colour, e.dark_colour, max);   
+    }
+
+    function drawCounter(name: string, block: Block, CURRENT: string, MAX: string, colour: string, dark_colour: string, maxCount?: number) {
         const pos = [TOOLBOX_WIDTH + 5 + c++ * 85, HEIGHT - 30];
         const tick = isPlaying && COUNTER[CURRENT] >= COUNTER[MAX];
-        drawTexture("block_" + name, pos[0], pos[1], 28, 28);
+        drawTexture(name, pos[0], pos[1], 28, 28);
         if (tick) {
             ctx.beginPath();
             ctx.moveTo(pos[0] + 8, pos[1] + 12);
@@ -413,7 +425,7 @@ function drawCounters(): void {
         if (!tick) {
             c -= 0.35;
             if (!isPlaying) {
-                PROG = tilesCount(block) + "";
+                PROG = (maxCount || tilesCount(block)) + "";
             } else if (COUNTER[MAX] <= 1) {
                 PROG = "";  
                 c -= 0.275;
@@ -984,8 +996,9 @@ function getTextureName(block: Block, x?: number, y?: number): null | string {
     return name;
 }
 
-function registerCounter(id: string) {
+function registerCounter(id: string, info: CounterInfo) {
     EXTRA_COUNTERS.push(id);
+    EXTRA_COUNTERS_INFO[id] = info;
 }
 
 function getCurrentCounter(id: string): number | null {
@@ -1013,6 +1026,34 @@ function setPlayerPosition(pos: XYZ) {
     tileDimension = pos[2];
 }
 
+function getGravity() {
+    return REVERSE_GRAVITY;
+}
+
+function setGravity(gravity: boolean) {
+    REVERSE_GRAVITY = gravity;
+}
+
+function invertGravity() {
+    REVERSE_GRAVITY = !REVERSE_GRAVITY;
+}
+
+function getPlayerSize() {
+    return PLAYER_SIZE;
+}
+
+function setPlayerSize(size: number) {
+    PLAYER_SIZE = size;
+}
+
+function incrementCurrentCounter(id: string, decrement?: boolean) {
+    COUNTER["current_" + id + "s"] += decrement ? -1 : 1;
+}
+
+function setCurrentCounter(id: string, value: number) {
+    COUNTER["current_" + id + "s"] = value;
+}
+
 init();
 
 export {
@@ -1020,7 +1061,11 @@ export {
     killPlayer,
     tilePositions,
     collectTile,
-    getCurrentCounter, getMaxCounter,
+    getCurrentCounter, getMaxCounter, registerCounter,
     getSpawnInfo, getPlayerPosition,
-    setSpawnInfo, setPlayerPosition
+    setSpawnInfo, setPlayerPosition,
+    getGravity, setGravity, invertGravity,
+    getPlayerSize, setPlayerSize,
+    incrementCurrentCounter, setCurrentCounter,
+    playSound
 };
