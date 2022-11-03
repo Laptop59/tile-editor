@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyPlugin = require("copy-webpack-plugin");
 
 module.exports = {
   entry: './src/index.ts',
@@ -26,8 +27,13 @@ module.exports = {
   },
   plugins: [
     new HtmlWebpackPlugin({
-        title: "Tile Editor",
-        favicon: "./src/icons/dev.ico"
+      title: "Tile Editor",
+      favicon: "./src/icons/dev.ico"
+    }),
+    new CopyPlugin({
+      patterns: [
+        { from: "./src/mods", to: "mods" },
+      ],
     })
   ],
   resolve: {

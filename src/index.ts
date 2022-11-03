@@ -1,9 +1,10 @@
 import "./style.css";
 import textures from "./textures.png";
 import expandableTextures from "./expandable.png";
-import textureAtlas, { expandableAtlas } from "./atlas";
-import Block, { blockTable, blockCodes, COLLECTIBLE, COLLIDABLE } from "./block";
-import palette, { onlyOnce } from "./palette";
+import textureAtlas, { extraTextureEntry, expandableAtlas } from "./atlas";
+import Block, { blockTable as BlockTable, blockCodes as BlockCodes, COLLECTIBLE, COLLIDABLE } from "./block";
+import { default as Palette, onlyOnce } from "./palette";
+let palette = Palette;
 
 // Sounds
 import SOUND_PLAY from "./audio/play.mp3";
@@ -15,7 +16,11 @@ import SOUND_CHECKPOINT from "./audio/checkpoint.mp3";
 import SOUND_COLLECT from "./audio/collect.mp3";
 
 // Util
-import {handleKey, HELD, getParameter, or, SpawnInfo, copyToClipboard, convertToBlockCodes, Level} from "./util";
+import {handleKey, HELD, getParameter, or, copyToClipboard, convertToBlockCodes, Level} from "./util";
+import loadMods, { BlockCode } from "./mods";
+
+let blockTable = BlockTable;
+let blockCodes = BlockCodes;
 
 // Constants
 const WIDTH: number = 1280;
@@ -27,7 +32,8 @@ const TOOLBOX_WIDTH: number = EMBED ? 0 : 288;
 const AUTOLOAD = getParameter("level");
 let TILES_WIDTH: number = Math.max(+or(getParameter("width"), 22), 3);
 let TILES_HEIGHT: number = Math.max(+or(getParameter("height"), 16), 3);
-let SIDE_LENGTH = HEIGHT / TILES_HEIGHT;
+let TILE_OFFSET: [number, number];
+let SIDE_LENGTH = getNewTileSide();
 const ICON_SIDE = 52;
 const SLOT_R = 42;
 const SLOTS_PER_PAGE = 8;
@@ -35,6 +41,7 @@ const [LOCK_WIDTH, LOCK_HEIGHT] = [67, 100]
 let DIMENSIONS = Math.max(+getParameter("dimensions") || 4, 1);
 const MAX_COLLIDES = 1000;
 const TOUCH_FRAC = 60 / 64;
+const MINI_NUM = 0.0000001;
 let FRICTION = +or(getParameter("friction"), 0.025);
 const SOUNDS: { [key: string]: string } = {
     play: SOUND_PLAY,
@@ -47,7 +54,7 @@ const SOUNDS: { [key: string]: string } = {
 };
 let ELEM_SOUNDS: { [key: string]: HTMLAudioElement } = {};
 
-let PLAYER_SIZE = 1;
+let PLAYER_SIZE = +or(getParameter("size"), 1);
 let justPause = false;
 
 // Physics are run at 600 FPS!
@@ -65,6 +72,8 @@ let isPlaying = false;
 let page = 0;
 let frameDate = new Date();
 let deltaTime: number = 0;
+let extraAtlases: [{[key: number]: HTMLImageElement}, {[key: string]: extraTextureEntry}] = [[], {}];
+let blockFunctions: {[key: string]: BlockCode} = {};
 
 let X_OFFSET: number = 0, Y_OFFSET: number = 0;
 let S_WIDTH: number = 0, S_HEIGHT: number = 0;
@@ -75,8 +84,18 @@ let tileDimension: number = 0;
 let PLAYER_POS: [number, number] = [0, 0];
 let PLAYER_VEL: [number, number] = [0, 0];
 let PLAYER_SP: SpawnInfo;
+let mods = getParameter("mods") ? getParameter("mods").split(",") : [];
+let modpacks = getParameter("modpacks") ? getParameter("modpacks").split(",") : [];
 
 let CAN_JUMP = false;
+
+const COUNTERS = [
+    "star",
+    "hexagon",
+    "triangle",
+    "circle",
+    "square"
+];
 
 // Make some custom things
 let REVERSE_GRAVITY_START = getParameter("upside") != undefined;
@@ -85,12 +104,10 @@ let JUMP_HEIGHT = +or(getParameter("jump"), 0.4);
 let SPRING_JUMP_HEIGHT = +or(getParameter("spring_jump"), 0.575);
 let QUEUED_ALERTS: string[] = [];
 let CUSTOM_MAX: {[key: string]: number} = {};
-"star,hexagon,triangle,circle,square".split(",").forEach(v => {
-    const value = getParameter("max_" + v);
-    if (value) CUSTOM_MAX[v] = +value;
-});
+let EXTRA_COUNTERS: string[] = [];
 
 let COUNTER: { [key: string]: number } = {
+    "": 0,
     current_stars: 0,
     max_stars: 0,
     current_hexagons: 0,
@@ -103,7 +120,7 @@ let COUNTER: { [key: string]: number } = {
     max_squares: 0
 }
 
-function init(): void {
+function init() {
     canvas = document.createElement("canvas");
     canvas.innerText = "Canvas is not supported.";
     canvas.addEventListener("mousedown", click);
@@ -116,6 +133,8 @@ function init(): void {
     canvas.height = HEIGHT;
     setCanvas();
 
+    modsInit();
+
     textureImg = new Image();
     textureImg.src = textures;
     expandableTextureImg = new Image();
@@ -125,12 +144,41 @@ function init(): void {
 
     document.body.appendChild(canvas);
 
+    COUNTERS.forEach(v => {
+        const value = getParameter("max_" + v);
+        if (value) CUSTOM_MAX[v] = +value;
+    });
+
     if (AUTOLOAD) loadLevel(AUTOLOAD);
     if (EMBED || STARTNOW) {
         initPlay();
         resetPlayer();
     }
+
     window.requestAnimationFrame(tick);
+}
+
+async function modsInit() {
+    await Promise.all(modpacks.map(path => new Promise(
+        r => {
+            fetch(path)
+            .then(d => d.json())
+            .then(d => mods = mods.concat(d))
+            .then(r)
+            .catch(e => {
+                console.error("Modpack failed to load", e);
+                r([]);
+            })
+        }
+    )));
+
+    let result = await loadMods(mods, {palette, extraAtlases, blockFunctions, blockTable, blockCodes});
+
+    palette = result.palette;
+    extraAtlases = result.extraAtlases;
+    blockFunctions = result.blockFunctions;
+    blockTable = result.blockTable;
+    blockCodes = result.blockCodes;
 }
 
 function createAudios() {
@@ -168,8 +216,8 @@ function handleClick(x: number, y: number): void {
     if (window.location.href.endsWith("#d")) alert(x+":"+y);
     if (!isPlaying && slotSelected >= 0 && x >= TOOLBOX_WIDTH) {
         if (shouldLock(slotSelected)) return; // Don't allow to place more!
-        const tx = Math.floor((x - TOOLBOX_WIDTH) / SIDE_LENGTH) - 1;
-        const ty = Math.floor(y / SIDE_LENGTH) - 1;
+        const tx = Math.floor((x - TOOLBOX_WIDTH - TILE_OFFSET[0]) / SIDE_LENGTH) - 1;
+        const ty = Math.floor((y - TILE_OFFSET[1]) / SIDE_LENGTH) - 1;
         if (tx < 0 || tx > TILES_WIDTH - 2 || ty < 0 || ty > TILES_HEIGHT - 2) return;
         const type = palette[slotSelected][0];
         tiles[tileDimension][ty][tx] = blockTable[type];
@@ -230,7 +278,7 @@ function loadLevel(code?: string) {
         const level: Level = JSON.parse(code);
         TILES_WIDTH = Math.max(+or(level.width, 22), 3);
         TILES_HEIGHT = Math.max(+or(level.height, 16), 3);
-        SIDE_LENGTH = HEIGHT / TILES_HEIGHT;
+        SIDE_LENGTH = getNewTileSide();
         let codes = Object.keys(blockCodes);
         let x = 0, y = 0, z = 0;
         tiles = level.tiles.map((D: (string | number)[][]) => {
@@ -268,10 +316,10 @@ function initPlay() {
     setupTiles(true);
 
     // COUNTER settings
-    "star,hexagon,triangle,circle,square".split(",").forEach(v => {
+    for (let v of COUNTERS.concat(EXTRA_COUNTERS)) {
         COUNTER["current_" + v + "s"] = 0;
         COUNTER["max_" + v + "s"] = +or(CUSTOM_MAX[v], tilesCount(blockTable[v]));
-    });
+    };
 }
 
 function resetPlayer() {
@@ -399,7 +447,7 @@ function isColliding(): boolean {
             const ax = rx + x + 1, ay = ry + y + 1;
             const block = getTile(ax, ay);
             const dx = PLAYER_POS[0] - ax + 1, dy = PLAYER_POS[1] - ay + 1;
-            const touching = Math.abs(dx) < PLAYER_SIZE * TOUCH_FRAC && Math.abs(dy) < PLAYER_SIZE * TOUCH_FRAC;
+            const touching = (Math.abs(dx) + (1 - PLAYER_SIZE)/2) < TOUCH_FRAC - MINI_NUM && (Math.abs(dy) + (1 - PLAYER_SIZE)/2) < TOUCH_FRAC - MINI_NUM;
 
             if (touching)
                 handleExtraThings(block, ax - 1, ay - 1);
@@ -411,6 +459,9 @@ function isColliding(): boolean {
 }
 
 function isCollidable(block: Block, x?: number, y?: number): boolean {
+    const id = Object.keys(blockTable).find(id => blockTable[id] == block);
+    const collide = blockFunctions[id]?.isCollidable;
+    if (collide) return typeof collide === "function" ? collide(x, y) : collide;
     switch (block) {
         case Block.HEXAGON_LOCK:
             return COUNTER.current_hexagons < COUNTER.max_hexagons;
@@ -442,26 +493,40 @@ function stopPlaying() {
     setupTiles(true);
 }
 
+function finishLevel() {
+    if (EMBED) {
+        justPause = true;
+        if (confirm("Congratulations! You finished the level! Would you like to play again?")) {
+            justPause = false;
+            initPlay();
+            resetPlayer();
+        }
+    } else stopPlaying();
+    playSound("finish");
+}
+
+function killPlayer() {
+    // Die
+    resetPlayer();
+    playSound("die");
+}
+
 function handleExtraThings(block: Block, x?: number, y?: number) {
+    const id = Object.keys(blockTable).find(id => blockTable[id] == block);
+    const act = blockFunctions[id]?.onCollision;
+    if (act) {
+        act();
+        return;
+    };
     switch (block) {
         case Block.FINISH:
             // Well, only if the finish is unlocked :)
             if (!(COUNTER.max_stars == 0 || COUNTER.current_stars >= COUNTER.max_stars)) return;
             // Stop playing!
-            if (EMBED) {
-                justPause = true;
-                if (confirm("Congratulations! You finished the level! Would you like to play again?")) {
-                    justPause = false;
-                    initPlay();
-                    resetPlayer();
-                }
-            } else stopPlaying();
-            playSound("finish");
+            finishLevel();
             break;
         case Block.LAVA:
-            // Die
-            resetPlayer();
-            playSound("die");
+            killPlayer();
             break;
         case Block.SPRING:
             PLAYER_VEL[1] = -SPRING_JUMP_HEIGHT;
@@ -607,7 +672,13 @@ function doPhysics(dt: number) {
         }
     }
     let [X, Y] = PLAYER_POS;
-    drawTexture("player", (X + 1.5 - PLAYER_SIZE / 2) * SIDE_LENGTH + TOOLBOX_WIDTH, (Y + 1.5 - PLAYER_SIZE / 2) * SIDE_LENGTH, PLAYER_SIZE * SIDE_LENGTH, PLAYER_SIZE * SIDE_LENGTH);
+    drawTexture("player", TILE_OFFSET[0] + (X + 1.5 - PLAYER_SIZE / 2) * SIDE_LENGTH + TOOLBOX_WIDTH, TILE_OFFSET[1] + (Y + 1.5 - PLAYER_SIZE / 2) * SIDE_LENGTH, PLAYER_SIZE * SIDE_LENGTH, PLAYER_SIZE * SIDE_LENGTH);
+}
+
+function getNewTileSide(): number {
+    const side = Math.min(HEIGHT / TILES_HEIGHT, (WIDTH - TOOLBOX_WIDTH) / TILES_WIDTH);
+    TILE_OFFSET = [(WIDTH - TOOLBOX_WIDTH - side*TILES_WIDTH) / 2, (HEIGHT - side*TILES_HEIGHT) / 2];
+    return side;
 }
 
 function setCanvas(): void {
@@ -643,6 +714,12 @@ function drawRect(x: number, y: number, w: number, h: number, color: string) {
 
 function drawTexture(id: string, dx: number, dy: number, dw: number, dh: number, expandable?: boolean): void {
     let f;
+    let tex = extraAtlases[1][id];
+    if (tex) {
+        let img = extraAtlases[0][tex.atlas];
+        ctx.drawImage(img, tex.x, tex.y, tex.w, tex.h, dx, dy, dw, dh);
+        return;
+    }
     if (expandable) {
         const index = expandableAtlas.findIndex(o => id.split(".")[0] == o);
         const type = {
@@ -689,7 +766,11 @@ function drawTiles() {
         for (let x = 0; x < TILES_WIDTH; x++) {
             const texName = getTextureName(getTile(x, y), x - 1, y - 1);
             if (!texName) continue;
-            drawTexture(texName, x * SIDE_LENGTH + TOOLBOX_WIDTH, y * SIDE_LENGTH, SIDE_LENGTH, SIDE_LENGTH);
+            if (texName == "block_player") {
+                drawTexture(texName, TILE_OFFSET[0] + x * SIDE_LENGTH + TOOLBOX_WIDTH + (1 - PLAYER_SIZE) * SIDE_LENGTH /  2, TILE_OFFSET[1] + y * SIDE_LENGTH + (1 - PLAYER_SIZE) * SIDE_LENGTH / 2, SIDE_LENGTH * PLAYER_SIZE, SIDE_LENGTH * PLAYER_SIZE);
+            } else {
+                drawTexture(texName, TILE_OFFSET[0] + x * SIDE_LENGTH + TOOLBOX_WIDTH, TILE_OFFSET[1] + y * SIDE_LENGTH, SIDE_LENGTH, SIDE_LENGTH);
+            }
         }
     }
 }
@@ -833,14 +914,21 @@ function getTile(x: number, y: number): Block {
 
 function getTextureName(block: Block, x?: number, y?: number): null | string {
     const values = Object.values(blockTable);
-    const name = "block_" + Object.keys(blockTable).find(
+    let name = Object.keys(blockTable).find(
         (_, i) => values[i] == block
     );
+
+    let tex = blockFunctions[name]?.getTexture;
+    if (tex) return typeof tex === "function" ? tex(x, y) : tex;
+
+    let shape;
+
+    name = "block_" + name;
     if (name === "block_undefined") {
         console.warn("Couldn't find string ID for block id " + block + "!");
         return null;
     }
-    let shape;
+
     if (name == "block_air" || (name == "block_player" && isPlaying)) {
         // Player block shouldn't be displayed when you are playing!
         // Air should not be drawn; no texture.
@@ -896,4 +984,43 @@ function getTextureName(block: Block, x?: number, y?: number): null | string {
     return name;
 }
 
+function registerCounter(id: string) {
+    EXTRA_COUNTERS.push(id);
+}
+
+function getCurrentCounter(id: string): number | null {
+    return or(COUNTER["current_" + id + "s"], null);
+}
+
+function getMaxCounter(id: string): number | null {
+    return or(COUNTER["max_" + id + "s"], null);
+}
+
+function getSpawnInfo(): SpawnInfo {
+    return PLAYER_SP;
+}
+
+function setSpawnInfo(info: SpawnInfo) {
+    PLAYER_SP = info;
+}
+
+function getPlayerPosition() {
+    return PLAYER_POS.concat([tileDimension]) as XYZ;
+}
+
+function setPlayerPosition(pos: XYZ) {
+    PLAYER_POS = pos.slice(0, 2) as [number, number];
+    tileDimension = pos[2];
+}
+
 init();
+
+export {
+    finishLevel,
+    killPlayer,
+    tilePositions,
+    collectTile,
+    getCurrentCounter, getMaxCounter,
+    getSpawnInfo, getPlayerPosition,
+    setSpawnInfo, setPlayerPosition
+};
