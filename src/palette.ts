@@ -1,6 +1,6 @@
 type Slot = string | null;
 
-const palette: [Slot, boolean][] = []
+let palette: [Slot, boolean][] = []
 .concat(
     ///
 auto([
@@ -62,5 +62,6 @@ function manual(arr: Slot[]): [Slot, boolean][] {
 
 export {
     palette as default,
-    onlyOnce
+    onlyOnce,
+    Slot
 }

@@ -65,11 +65,6 @@ function or(value: any, other: any): any {
     return (value === null || value === undefined) ? other : value;
 }
 
-interface SpawnInfo {
-    spawn: [number, number, number],
-    reversed_gravity: boolean
-}
-
 async function copyToClipboard(content: string) {
     if (!navigator.clipboard) return fallbackCopyToClipboard(content);
     await navigator.clipboard.writeText(content);
@@ -100,7 +95,6 @@ export {
     handleKey, HELD,
     getParameter,
     or,
-    SpawnInfo,
     copyToClipboard,
     convertToBlockCodes,
     Level
