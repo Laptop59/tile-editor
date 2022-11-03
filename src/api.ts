@@ -1,5 +1,5 @@
 import Block, { blockTable } from "./block";
-import { finishLevel, killPlayer, tilePositions, collectTile as bigCollectTile, getCurrentCounter, getMaxCounter, getSpawnInfo, setSpawnInfo, getPlayerPosition, setPlayerPosition } from "./index";
+import { finishLevel, killPlayer, tilePositions, collectTile as bigCollectTile, getCurrentCounter, getMaxCounter, getSpawnInfo, setSpawnInfo, getPlayerPosition, setPlayerPosition, getGravity, setGravity, invertGravity, getPlayerSize, setPlayerSize, incrementCurrentCounter, setCurrentCounter, playSound, registerCounter} from "./index";
 
 /*
     This file defines the `API` for mods!
@@ -14,10 +14,19 @@ const API = {
     collectTile,
     getCurrentCounter,
     getMaxCounter,
+    registerCounter,
     getSpawnInfo,
     setSpawnInfo,
     getPlayerPosition,
-    setPlayerPosition
+    setPlayerPosition,
+    getGravity,
+    setGravity,
+    invertGravity,
+    getPlayerSize,
+    setPlayerSize,
+    incrementCurrentCounter,
+    setCurrentCounter,
+    playSound
 }
 
 function collectTile(position: XYZ, current?: string, max?: string) {

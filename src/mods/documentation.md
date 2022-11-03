@@ -40,9 +40,18 @@ First, you need to add the constructor (because classes)
 It has to store the API parameter to the class `this`
 ```js
 class Mod {
+    /**
+     * Our constructor to use to initialize this mod!
+     * @param {API} API The API to use 
+     */
     constructor(API) {
-        // Set the API
+        // Setup the API for use.
+        /**
+         * @type {API}
+         */
         this.API = API;
+        
+        // -- You might have to add more bindings.
     }
 }
 // ...
@@ -151,12 +160,13 @@ return {
         {
             id: "my_block_id", // The ID. This is used by the palette.
             save: "my_block_save_id", // This string will appear when you save the level! DO NOT CHANGE THIS AT ALL!
+            collectible: false, // If the block is a collectible.
             code: {
                 // `block_` should preceed all block texture names as good practice.
                 getTexture: "block_texture" // This can also be a function accepting `x` and `y` parameters.
                 isCollidable: false // This can also be a function accepting `x` and `y` parameters.
                 onCollision: function() {
-                    API.finishLevel() // This finishes the level for the player.
+                    this.API.finishLevel() // This finishes the level for the player.
                 } // This doesn't have to be defined.
             }
         }
@@ -165,5 +175,9 @@ return {
 }
 ```
 
+For an example of an mod, look at `test_mod.js`.
+
 # API Documentation
 API Documentation can be found on `declarations.d.ts`.
+
+If you'd like to get intellisense of the API properties, use the `declarations.d.ts` provided.

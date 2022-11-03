@@ -1,11 +1,27 @@
+// @ts-check
+
 class TestMod {
     /**
      * Our constructor to use to initialize this mod!
-     * @param API The API to use 
+     * @param {API} API The API to use 
      */
     constructor(API) {
         // Setup the API for use.
+        /**
+         * @type {API}
+         */
         this.API = API;
+        this.goldCollision = this.goldCollision.bind(this);
+        this.crystalCollision = this.crystalCollision.bind(this);
+
+        this.API.registerCounter("crystal", {
+            colour: "#aaffff",
+            dark_colour: "#004444",
+            shown: true,
+            icon: "crystal_logo",
+            getMax: () => this.API.tilePositions(this.API.getBlockFromID("crystal")).length ** 3,
+            showCounter: () => this.API.tilePositions(this.API.getBlockFromID("crystal")).length > 0
+        });
     }
 
     /**
@@ -25,7 +41,10 @@ class TestMod {
                     outlined: false
                 },
                 null,
-                null,
+                {
+                    id: "crystal",
+                    outlined: true
+                },
                 null,
                 null,
                 null
@@ -34,12 +53,28 @@ class TestMod {
                 {
                     id: "black",
                     save: "test_B",
-                    code: this.Black()
+                    code: {
+                        getTexture: "block_black",
+                        isCollidable: true
+                    }
                 },
                 {
                     id: "gold",
                     save: "test_G",
-                    code: this.Gold()
+                    code: {
+                        getTexture: "block_gold",
+                        isCollidable: false,
+                        onCollision: this.goldCollision
+                    }
+                },
+                {
+                    id: "crystal",
+                    save: "test_C",
+                    code: {
+                        getTexture: "block_crystal",
+                        isCollidable: false,
+                        onCollision: this.crystalCollision
+                    }
                 }
             ],
             atlases: {
@@ -62,6 +97,20 @@ class TestMod {
                     w: 1,
                     h: 1
                 },
+                block_crystal: {
+                    atlas: "atlas",
+                    x: 3,
+                    y: 0,
+                    w: 1,
+                    h: 1
+                },
+                crystal_logo: {
+                    atlas: "atlas",
+                    x: 0,
+                    y: 1,
+                    w: 4,
+                    h: 5
+                }
                 /* unused: {
                     atlas: "unused",
                     x: 0,
@@ -73,30 +122,15 @@ class TestMod {
         }
     }
 
-    /**
-     * All the code for the black block.
-     */
-    Black() {
-        return {
-            getTexture: "block_black",
-            isCollidable: true
-        }
+    goldCollision() {
+        if (Math.random() < 0.01) this.API.finishLevel()
+        else if (Math.random() < 0.01) this.API.killPlayer();
+        this.API.playSound("checkpoint")
     }
 
-    /**
-     * All the code for the golden block.
-     */
-    Gold() {
-        return {
-            getTexture: function() {
-                return "block_gold"
-            },
-            isCollidable: false,
-            onCollision: function() {
-                if (Math.random() < 0.01) API.finishLevel();
-                else if (Math.random() < 0.01) API.killPlayer();
-            }
-        }
+    crystalCollision() {
+        this.API.incrementCurrentCounter("crystal");
+        this.API.playSound("collect");
     }
 }
 
