@@ -16,12 +16,8 @@ module.exports = {
         use: ['style-loader', 'css-loader'],
       },
       {
-        test: /\.(png|svg|jpg|jpeg|gif|ico)$/i,
+        test: /\.(png|svg|jpg|jpeg|gif|ico|mp3|wav|ogg|otf|ttf)$/i,
         type: 'asset/resource',
-      },
-      {
-        test: /\.(mp3|wav|ogg|otf|ttf)$/i,
-        type: 'asset/resource'
       }
     ],
   },
@@ -32,7 +28,7 @@ module.exports = {
     }),
     new CopyPlugin({
       patterns: [
-        { from: "./src/mods", to: "mods" },
+        { from: "./src/mods", to: "mods" }
       ],
     })
   ],
