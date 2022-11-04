@@ -23,19 +23,175 @@ declare type Sound = "all_collected" | "checkpoint" | "collect" | "die" | "finis
  * Information about a counter.
  */
 declare interface CounterInfo {
+    /**
+     * The colour the filled text will be represented in.
+     */
     colour: string,
+
+    /**
+     * The colour the tickmark and the outlined text will be represented in.
+     */
     dark_colour: string,
+
+    /**
+     * If the counter should be shown.
+     */
     shown: boolean
+
+    /**
+     * Use this if you don't want to use a texture from the counter ID
+     */
     icon?: string,
+
+    /**
+     * The maximum number of the counter.
+     */
     getMax?: (() => number) | number
+
+    /**
+     * If the counter should be shown. `isPlaying` is also provided as an argument.
+     */
     showCounter?: (isPlaying?: boolean) => boolean
+}
+
+/**
+ * Entry of a palette
+ */
+declare interface PaletteEntry {
+    /**
+     * ID of the block
+     */
+    id: string,
+
+    /**
+     * If the block icon should be outlined with white colour.
+     */
+    outlined: boolean
+
+    /**
+     * If the block should replace an existing number slot from the palette and where.
+     */
+    replace?: number
+}
+
+/**
+ * Information about a block
+ */
+declare interface BlockInfo {
+    /**
+     * The ID of the block. This will be used for the palette.
+     * 
+     * A number for this block will be automatically generated.
+     */
+    id: string,
+
+    /**
+     * The save ID of the block. For example: Ground Block → `G`.
+     * 
+     * When you save a level with this block, this block will use the save ID in the level data.
+     * It is required for making levels with this block.
+     */
+    save: string | number,
+
+    /**
+     * All the code for this block.
+     */
+    code: BlockCode
+}
+
+/**
+ * Defines all the code for a block.
+*/
+declare interface BlockCode {
+    /**
+     * The texture of the block.
+     * 
+     * If you provide a function instead, `x` and `y` are provided to you as arguments.
+     */
+    getTexture: string | ((x: number, y: number) => string),
+
+    /**
+     * If the block should be collidable directly with the player.
+     * 
+     * If you provide a function instead, `x` and `y` are provided to you as arguments.
+     * 
+     * Note: A solid block would have this `true` and a pass-through block would have this `false`.
+     */
+    isCollidable: boolean | ((x: number, y: number) => boolean)
+
+    /**
+     * This function executes when the player touches or collides with this block.
+     */
+    onCollision?: () => void
+}
+
+/**
+ * Information about a mod.
+ */
+declare interface ModInfo {
+    /**
+     * This defines the palette of the mod.
+     */
+    palette: (PaletteEntry | null)[],
+
+    /**
+     * This defines all the blocks of the mod.
+     */
+    blocks: BlockInfo[],
+
+    /**
+     * This defines all the atlases of the mod.
+     */
+    atlases: { [key: string]: string },
+
+    /**
+     * This defines all the textures of the mod.
+     */
+    textures: { [key: string]: ModTextureEntry }
+}
+
+/**
+ * Defines a texture in a mod.
+ */
+declare interface ModTextureEntry {
+    /**
+     * The ID of the atlas to use.
+     */
+    atlas: string,
+
+    /**
+     * The left position of the atlas to start from.
+     */
+    x: number,
+
+    /**
+     * The top position of the atlas to start from.
+     */
+    y: number,
+
+    /**
+     * How many pixels the atlas should go through till the right position.
+     */
+    w: number,
+
+    /**
+     * How many pixels the atlas should go through till the bottom position.
+     */
+    h: number
 }
 
 /**
  * An interface for storing player spawn data.
  */
 declare interface SpawnInfo {
+    /**
+     * The spawn position of the player.
+     */
     spawn: XYZ,
+
+    /**
+     * Reversed gravity when the player touched the checkpoint.
+     */
     reversed_gravity: boolean
 }
 
@@ -116,14 +272,14 @@ declare interface API {
      * @since 1.0.0
      */
     getSpawnInfo(): SpawnInfo;
-    
+
     /**
      * Set the spawn information of the player.
      * @param info The new spawn information to replace the old one with.
      * @since 1.0.0
      */
     setSpawnInfo(info: SpawnInfo): void;
-    
+
     /**
      * Get the current player position.
      * 
@@ -131,7 +287,7 @@ declare interface API {
      * @since 1.0.0
      */
     getPlayerPosition(): XYZ;
-    
+
     /**
      * Set the player position.
      * @param pos The new position of the player.
@@ -157,7 +313,7 @@ declare interface API {
      * @since 1.0.0
      */
     setGravity(gravity: boolean): void;
-    
+
     /**
      * Invert the gravity of the player.
      * @since 1.0.0
@@ -170,7 +326,7 @@ declare interface API {
      * @since 1.0.0
      */
     getPlayerSize(): number
-    
+
     /**
      * Set the player size of the player.
      * The normal size is `1`.
@@ -186,7 +342,7 @@ declare interface API {
      * @since 1.0.0
      */
     incrementCurrentCounter(id: string, decrement?: boolean): void;
-    
+
     /**
      * Set a current counter from ID.
      * @param id The ID of the counter.

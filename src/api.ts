@@ -5,7 +5,7 @@ import { finishLevel, killPlayer, tilePositions, collectTile as bigCollectTile, 
     This file defines the `API` for mods!
 */
 
-const API = {
+const API: API = {
     finishLevel,
     killPlayer,
     getBlockFromID,
@@ -28,6 +28,8 @@ const API = {
     setCurrentCounter,
     playSound
 }
+
+// Some helper functions for use in the API.
 
 function collectTile(position: XYZ, current?: string, max?: string) {
     current = current || "";

@@ -17,7 +17,7 @@ import SOUND_COLLECT from "./audio/collect.mp3";
 
 // Util
 import {handleKey, HELD, getParameter, or, copyToClipboard, convertToBlockCodes, Level} from "./util";
-import loadMods, { BlockCode } from "./mods";
+import loadMods from "./mods";
 
 let blockTable = BlockTable;
 let blockCodes = BlockCodes;
