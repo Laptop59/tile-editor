@@ -5,8 +5,7 @@
   "description": "A recreation of a Scratch game of tiles 'Tile Game'!",
   "scripts": {
     "start": "webpack serve --config webpack.config.js",
-    "build": "webpack --config production.config.js",
-    "docs": "jsdoc declarations.d.ts"
+    "build": "webpack --config production.config.js"
   },
   "author": "Laptop59",
   "license": "ISC",
