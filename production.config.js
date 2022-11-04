@@ -1,6 +1,8 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyPlugin = require("copy-webpack-plugin");
+const ZipWebpackPlugin = require("zip-webpack-plugin");
+const version = require("./package.json").version;
 
 module.exports = {
   entry: './src/index.ts',
@@ -33,6 +35,10 @@ module.exports = {
       patterns: [
         { from: "./src/mods", to: "mods" }
       ],
+    }),
+    new ZipWebpackPlugin({
+      path: "zip",
+      filename: `tile-editor-v${version}.zip`
     })
   ],
   resolve: {
