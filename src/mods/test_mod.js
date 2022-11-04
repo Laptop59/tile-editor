@@ -26,6 +26,7 @@ class TestMod {
 
     /**
      * Return an object about the mod information.
+     * @returns {ModInfo}
      */
     getInfo() {
         // Return our information.
@@ -75,7 +76,7 @@ class TestMod {
                         isCollidable: false,
                         onCollision: this.crystalCollision
                     }
-                }
+                },
             ],
             atlases: {
                 "atlas": "http://localhost:3000/mods/test_mod_atlas.png",

@@ -10,28 +10,8 @@ type TemporaryObject = {
     blockCodes: {[key: string]: string | number}
 };
 
-type BlockCode = {
-    getTexture: ((x?: number, y?: number) => string) | string,
-    isCollidable: ((x?: number, y?: number) => boolean) | boolean,
-    onCollision: (() => void) | null | undefined,
-    save: string
-};
-
 let atlasNum = 0;
 let blockID = -1;
-
-interface ModInfo {
-    palette: {id: string, outlined: boolean}[],
-    atlases: {[key: string]: string},
-    textures: {[key: string]: {
-        atlas: string,
-        x: number,
-        y: number,
-        w: number,
-        h: number
-    }},
-    blocks: {id: string, save: string, code: BlockCode}[]
-}
 
 let temp: TemporaryObject;
 
@@ -78,7 +58,18 @@ function registerModClass(mod: any) {
         // Atlases
         // Textures
 
-        temp.palette = palette.concat(info.palette.map((o: {id: string, outlined: boolean}) => o ? [o.id, !o.outlined] : [null, false]));
+        let newp: [string|null, boolean][] = [];
+
+        for (let p of info.palette) {
+            let slot: [string, boolean] = p ? [p.id, !p.outlined] : [null, false];
+            if (p.replace && temp.palette.length > p.replace) {
+                temp.palette[p.replace] = slot;
+            } else {
+                newp.push(slot);
+            }
+        }
+
+        temp.palette = temp.palette.concat(newp);
         
         let mapping: {[key: string]: number} = {};
 
@@ -108,7 +99,4 @@ function registerModClass(mod: any) {
     }
 }
 
-export {
-    loadMods as default,
-    BlockCode
-};
+export default loadMods;
