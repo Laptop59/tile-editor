@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyPlugin = require("copy-webpack-plugin");
 
 module.exports = {
   entry: './src/index.ts',
@@ -28,6 +29,11 @@ module.exports = {
     new HtmlWebpackPlugin({
         title: "Tile Editor",
         favicon: "./src/icons/favicon.ico"
+    }),
+    new CopyPlugin({
+      patterns: [
+        { from: "./src/mods", to: "mods" },
+      ],
     })
   ],
   resolve: {
@@ -35,7 +41,7 @@ module.exports = {
   },
   output: {
     filename: 'bundle.js',
-    path: path.resolve(__dirname, 'dist'),
+    path: path.resolve(__dirname, 'build'),
     clean: true
   },
   mode: "production"
