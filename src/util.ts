@@ -42,7 +42,15 @@ interface Level {
     height: number,
     tiles: (string | number)[][][],
     friction?: number,
-    max?: {[key: string]: number}
+    max?: {[key: string]: number},
+    mods?: string[],
+
+    // This is exclusive to server-levels.
+    title?: string,
+    author?: string,
+    plays?: number,
+    id?: number,
+    verified?: boolean
 }
 
 /**
@@ -91,11 +99,37 @@ function isEmptyStringDimension(dimension: (string | number)[][]): boolean {
     return !dimension.some(Y => Y.some(t => t !== 0));
 };
 
+interface ServerData {
+    recentdata?: Level[],
+    page?: number,
+    leveldata?: Level,
+    levelid?: number,
+    query?: string,
+    canconnect?: boolean
+}
+
+enum SMM { // Server Menu Modes
+    NONE,
+    MENU_BEFORE,
+    MENU_AFTER,
+    MENU_NONE,
+    MENU_ERROR,
+
+    SUBMIT_NONE,
+    SUBMIT_BEFORE,
+    SUBMIT_AFTER,
+    SUBMIT_ERROR,
+
+    QUERY_NONE
+}
+
 export {
     handleKey, HELD,
     getParameter,
     or,
     copyToClipboard,
     convertToBlockCodes,
-    Level
+    Level,
+    ServerData,
+    SMM
 }
