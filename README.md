@@ -15,8 +15,11 @@ Run `npm run build` to start building in production. It will at most take a minu
 `assets` - This contains all the hash-named assets.\
 `mods` - This is copied from the `src` folder. This contains example mod files and documentation.\
 `zip` - This contains a zip file which has almost the same contents as the build folder (not the `zip` folder though.)
+`server` - This contains the code for the server.
 
 ## Files
-`bundle.js` - This contains all the code for this game.\
+`bundle.js` - This contains (ALMOST) all the code for this game.\
+`#.bundle.js` - This contains a sample level.
 `favicon.ico` - This is the icon for the browser tab.\
 `index.html` - This is the webpage of the game. However, this only contains the frame of the actual webpage and `bundle.js` will fill the rest (like canvas for example).
+`LEVELS.md` - Documentation to load different types of levels.
