@@ -33,7 +33,9 @@ module.exports = {
     }),
     new CopyPlugin({
       patterns: [
-        { from: "./src/mods", to: "mods" }
+        { from: "./src/mods", to: "mods" },
+        { from: "./src/server", to: "server"},
+        { from: "./src/levels/LEVELS.md", to: "LEVELS.md"}
       ],
     }),
     new ZipWebpackPlugin({

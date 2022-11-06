@@ -16,8 +16,9 @@ import SOUND_CHECKPOINT from "./audio/checkpoint.mp3";
 import SOUND_COLLECT from "./audio/collect.mp3";
 
 // Util
-import {handleKey, HELD, getParameter, or, copyToClipboard, convertToBlockCodes, Level} from "./util";
+import { handleKey, HELD, getParameter, or, copyToClipboard, convertToBlockCodes, Level, ServerData, SMM } from "./util";
 import loadMods from "./mods";
+import ServerWorker from "./server";
 
 let blockTable = BlockTable;
 let blockCodes = BlockCodes;
@@ -53,9 +54,16 @@ const SOUNDS: { [key: string]: string } = {
     collect: SOUND_COLLECT
 };
 let ELEM_SOUNDS: { [key: string]: HTMLAudioElement } = {};
+const RANDOM_LEVEL_GEN_LINK = "https://api.json-generator.com/templates/cNAIgnNeUl-I/data?access_token=hotdm6zkrfdiamtmc2ah4pnxoftlqvjd2mn8jm4q";
+const SERVER_API = getParameter("server") || null;
+let serverWorker = SERVER_API ? new ServerWorker(SERVER_API, () => SERVER_DATA.canconnect = true) : null;
+let SERVER_DATA: ServerData = {};
+
+let SERVER_MENU_MODE: SMM = SMM.NONE;
 
 let PLAYER_SIZE = +or(getParameter("size"), 1);
 let justPause = false;
+let verified = false;
 
 // Physics are run at 600 FPS!
 const GRAVITY = +or(getParameter("gravity"), 0.02);
@@ -72,8 +80,8 @@ let isPlaying = false;
 let page = 0;
 let frameDate = new Date();
 let deltaTime: number = 0;
-let extraAtlases: [{[key: number]: HTMLImageElement}, {[key: string]: extraTextureEntry}] = [[], {}];
-let blockFunctions: {[key: string]: BlockCode} = {};
+let extraAtlases: [{ [key: number]: HTMLImageElement }, { [key: string]: extraTextureEntry }] = [[], {}];
+let blockFunctions: { [key: string]: BlockCode } = {};
 
 let X_OFFSET: number = 0, Y_OFFSET: number = 0;
 let S_WIDTH: number = 0, S_HEIGHT: number = 0;
@@ -88,6 +96,7 @@ let mods = getParameter("mods") ? getParameter("mods").split(",") : [];
 let modpacks = getParameter("modpacks") ? getParameter("modpacks").split(",") : [];
 
 let CAN_JUMP = false;
+let serverMenu = false;
 
 const COUNTERS = [
     "star",
@@ -103,9 +112,9 @@ let REVERSE_GRAVITY = REVERSE_GRAVITY_START;
 let JUMP_HEIGHT = +or(getParameter("jump"), 0.4);
 let SPRING_JUMP_HEIGHT = +or(getParameter("spring_jump"), 0.575);
 let QUEUED_ALERTS: string[] = [];
-let CUSTOM_MAX: {[key: string]: number} = {};
+let CUSTOM_MAX: { [key: string]: number } = {};
 let EXTRA_COUNTERS: string[] = [];
-let EXTRA_COUNTERS_INFO: {[key: string]: CounterInfo} = {};
+let EXTRA_COUNTERS_INFO: { [key: string]: CounterInfo } = {};
 
 let COUNTER: { [key: string]: number } = {
     "": 0,
@@ -163,17 +172,17 @@ async function modsInit() {
     await Promise.all(modpacks.map(path => new Promise(
         r => {
             fetch(path)
-            .then(d => d.json())
-            .then(d => mods = mods.concat(d))
-            .then(r)
-            .catch(e => {
-                console.error("Modpack failed to load", e);
-                r([]);
-            })
+                .then(d => d.json())
+                .then(d => mods = mods.concat(d))
+                .then(r)
+                .catch(e => {
+                    console.error("Modpack failed to load", e);
+                    r([]);
+                })
         }
     )));
 
-    let result = await loadMods(mods, {palette, extraAtlases, blockFunctions, blockTable, blockCodes});
+    let result = await loadMods(mods, { palette, extraAtlases, blockFunctions, blockTable, blockCodes });
 
     palette = result.palette;
     extraAtlases = result.extraAtlases;
@@ -213,8 +222,147 @@ function playSound(sound: string) {
         }
 }
 
+function drawServerMenu() {
+    drawRect(50, 50, WIDTH - 100, HEIGHT - 100, "#444444");
+    drawRect(70, 70, WIDTH - 140, HEIGHT - 140, "#565656");
+    drawTexture("left_arrow", 75, 75, 35, 35);
+
+    const info = serverWorker.serverInfo();
+    drawText(info.title, WIDTH/2, 100, info.colour, false, undefined, true, 40);
+
+    switch (SERVER_MENU_MODE) {
+        case SMM.MENU_NONE:
+            // Load the recent levels.
+            serverWorker.getRecent().then(r => {
+                SERVER_MENU_MODE = SMM.MENU_AFTER;
+                SERVER_DATA.recentdata = r;
+                SERVER_DATA.page = 0;
+            })
+            .catch(err => {
+                console.error(err);
+                SERVER_MENU_MODE = SMM.MENU_ERROR;
+            });
+            SERVER_MENU_MODE = SMM.MENU_BEFORE;
+            break;
+         case SMM.QUERY_NONE:
+            // Load the queried levels.
+            serverWorker.search(SERVER_DATA.query).then(r => {
+                SERVER_MENU_MODE = SMM.MENU_AFTER;
+                SERVER_DATA.recentdata = r;
+                SERVER_DATA.page = 0;
+            })
+            .catch(err => {
+                console.error(err);
+                SERVER_MENU_MODE = SMM.MENU_ERROR;
+            });
+            SERVER_MENU_MODE = SMM.MENU_BEFORE;
+            break;
+        case SMM.MENU_BEFORE:
+            drawText("Loading...", WIDTH/2, HEIGHT/2, "white", false, undefined, true, 40);
+            break;
+        case SMM.MENU_ERROR:
+            drawText("Couldn't load levels.", WIDTH/2, HEIGHT/2, "white", false, undefined, true, 40);
+            break;
+        case SMM.MENU_AFTER:
+            drawTexture("refresh", WIDTH - 75 - 35, 75, 35, 45);
+            drawTexture("search", WIDTH - 75 - 85 - 60, 75, 45, 45);
+
+            if (!serverWorker.cooldownSubmit()) drawTexture("upload", WIDTH - 75 - 85, 75, 45, 45);
+            if (SERVER_DATA.recentdata.length <= 0) {
+                let MES = "There are no levels. :(";
+                if (SERVER_DATA.query) MES = "No levels were found with that query.";
+                drawText(MES, WIDTH/2, HEIGHT/2, "white", false, undefined, true, 40);
+                return;
+            }
+            let s = SERVER_DATA.page * 5, i=0;
+
+            let PAGES = Math.ceil(SERVER_DATA.recentdata.length/5);
+
+            for (let level of SERVER_DATA.recentdata.slice(s, s + 5)) {
+                drawRect(80, 150 + i * 80, WIDTH - 200, 65, "white");
+                drawText(serverWorker.shorten(level.title || "Level"), 80 + 10, 150 + 5 + i * 80, "#222222", true, undefined, false, 39);
+                drawText(serverWorker.shorten(level.author || "Unknown"), 80 + 10, 150 + 40 + i * 80, "#222222", true, undefined, false, 25);
+                drawText(serverWorker.levelSize(level), WIDTH - 120 - 10, 150 + 5 + i * 80, "#222222", true, undefined, false, 30, true);
+                drawText(serverWorker.formatViews(level), WIDTH - 120 - 40 + 10, 150 + 5 + i * 80 + 65/2 - 5, "#222222", true, undefined, false, 30, true);
+                if (level.verified) drawTexture("verified", WIDTH - 140, 120 + i * 80, 60, 50);
+                drawTexture("plays", WIDTH - 120 - 30, 150 + 5 + i * 80 + 65/2 - 5, 35*0.75, 40*0.75);
+                i++;
+            }
+            drawTexture("left_arrow", WIDTH/2 - 50 - 50, HEIGHT - 127, 50, 50);
+            drawTexture("right_arrow", WIDTH/2 + 100 - 50, HEIGHT - 127, 50, 50);
+            drawText(`${SERVER_DATA.page + 1}/${PAGES}`, WIDTH/2, HEIGHT - 100, "white", false, undefined, true, 40, false);
+            break;
+        case SMM.SUBMIT_NONE:
+            serverWorker.submitLevel(SERVER_DATA.leveldata)
+            .then(id => {
+                if (typeof id !== "number") throw new Error();
+                SERVER_MENU_MODE = SMM.SUBMIT_AFTER;
+                SERVER_DATA.query = undefined;
+                SERVER_DATA.levelid = id;
+            })
+            .catch(() => {
+                SERVER_MENU_MODE = SMM.SUBMIT_ERROR;
+            });
+            SERVER_MENU_MODE = SMM.SUBMIT_BEFORE;
+            break;
+        case SMM.SUBMIT_BEFORE:
+            drawText("Uploading...", WIDTH/2, HEIGHT/2, "white", false, undefined, true, 40);
+            break;
+        case SMM.SUBMIT_ERROR:
+            drawText("Upload failed.", WIDTH/2, HEIGHT/2, "white", false, undefined, true, 40);
+            break;
+        case SMM.SUBMIT_AFTER:
+            drawText("Upload successful.", WIDTH/2, HEIGHT/2, "white", false, undefined, true, 40);
+            drawText("ID: " + SERVER_DATA.levelid, WIDTH/2, HEIGHT/2 + 30, "#bdbdbd", false, undefined, true, 33.5);
+            break;
+    }
+}
+
+function handleClickServer(x: number, y: number) {
+    if (x >= 75 && x <= 110 && y >= 75 && x <= 110) {
+        serverMenu = false;
+    } else if (SERVER_DATA.page + 1 < Math.ceil(SERVER_DATA.recentdata.length/5) && x >= WIDTH/2 + 100 - 50 && x <= WIDTH/2 + 100 && y >= HEIGHT - 127 && y <= HEIGHT - 127 + 50) {
+        SERVER_DATA.page++;
+    } else if (SERVER_DATA.page >= 1 && x >= WIDTH/2 - 50 - 50 && x <= WIDTH/2 - 50 && y >= HEIGHT - 127 && y <= HEIGHT - 127 + 50) {
+        SERVER_DATA.page--;
+    } else if (x >= WIDTH - 75 - 35 && x <= WIDTH - 35 && y >= 35 && y <= 35 + 45) {
+        SERVER_DATA.recentdata = undefined;
+        SERVER_MENU_MODE = SMM.MENU_NONE;
+    } else if (SERVER_MENU_MODE === SMM.MENU_AFTER && x >= WIDTH - 75 - 85 - 60 && y >= 75 && x <= WIDTH - 75 - 85 - 60 + 45 && y <= 75 + 45) {
+        const query = prompt("Type your query:");
+        if (query === null) return;
+
+        SERVER_DATA.query = query;
+        SERVER_MENU_MODE = SMM.QUERY_NONE;
+    } else if (SERVER_MENU_MODE === SMM.MENU_AFTER && !serverWorker.cooldownSubmit() && x >= WIDTH - 75 - 85 && x <= WIDTH - 75 - 85 + 45 && y >= 75 && y <= 75+45) {
+        // Ask
+        const name = prompt("Title:");
+        if (!name) return;
+        const author = prompt("Author:");
+        if (!author) return;
+
+        let submittedlevel = saveLevel(true) as Level;
+        submittedlevel.title = name;
+        submittedlevel.author = author;
+        
+        SERVER_MENU_MODE = SMM.SUBMIT_NONE;
+        SERVER_DATA.leveldata = submittedlevel;
+    } else if (SERVER_MENU_MODE === SMM.MENU_AFTER && x >= 80 && x <= 80 + WIDTH - 200) {
+        let s = SERVER_DATA.page * 5, i=0;
+        for (let level of SERVER_DATA.recentdata.slice(s, s + 5)) {
+            if (y >= 150 + i * 80 && y <= 215 + i * 80) {
+                serverMenu = false;
+                serverWorker.play(level.id);
+                loadLevel(level);
+            }
+            i++;
+        }
+    }
+}
+
 function handleClick(x: number, y: number): void {
-    if (window.location.href.endsWith("#d")) alert(x+":"+y);
+    // if (window.location.href.endsWith("#d")) alert(x + ":" + y);
+    if (serverMenu) return handleClickServer(x, y);
     if (!isPlaying && slotSelected >= 0 && x >= TOOLBOX_WIDTH) {
         if (shouldLock(slotSelected)) return; // Don't allow to place more!
         const tx = Math.floor((x - TOOLBOX_WIDTH - TILE_OFFSET[0]) / SIDE_LENGTH) - 1;
@@ -222,6 +370,7 @@ function handleClick(x: number, y: number): void {
         if (tx < 0 || tx > TILES_WIDTH - 2 || ty < 0 || ty > TILES_HEIGHT - 2) return;
         const type = palette[slotSelected][0];
         tiles[tileDimension][ty][tx] = blockTable[type];
+        verified = false;
         return;
     } else if (x >= 2 && x <= 37 && y >= 62 && y <= 100) {
         page--;
@@ -237,6 +386,9 @@ function handleClick(x: number, y: number): void {
         saveLevel();
     } else if (!isPlaying && x >= 247 && x <= 281 && y >= 528 && y <= 576) {
         loadLevel();
+    } else if (SERVER_DATA.canconnect && SERVER_API && !isPlaying && x >= 263 && x <= 280 && y >= 576 && y <= 607) {
+        serverMenu = true;
+        SERVER_MENU_MODE = SMM.MENU_NONE;
     }
     const touchingSlot = (() => {
         for (let i = 0; i < 4; i++) {
@@ -260,23 +412,66 @@ function handleClick(x: number, y: number): void {
     }
 }
 
-function saveLevel() {
+function saveLevel(returnLevel?: boolean): Level | void {
     let level: Level = {
         width: TILES_WIDTH,
         height: TILES_HEIGHT,
         tiles: convertToBlockCodes(tiles),
         friction: FRICTION,
-        max: CUSTOM_MAX
+        max: CUSTOM_MAX,
+        mods
     };
-    copyToClipboard(JSON.stringify(level));
-    showAlert("Code has been copied to your clipboard!");
+    if (returnLevel) {
+        level.verified = verified;
+        return level;
+    } else {
+        copyToClipboard(JSON.stringify(level));
+        showAlert("Code has been copied to your clipboard!");
+        return;
+    }
 }
 
-function loadLevel(code?: string) {
+function loadLevel(code?: string | Level) {
     if (!code) code = prompt("Put your level code:");
     if (!code) return;
-    try {
-        const level: Level = JSON.parse(code);
+    if (typeof code === "string" && code.startsWith("*")) {
+        // Sample level.
+        import(`./levels/${code.slice(1)}.json`)
+            .then(loadLevel)
+            .catch(e => {
+                alert("That is not a valid sample level!")
+                console.error("Error while loading sample level", e);
+            });
+    } else if (typeof code === "string" && code.startsWith("@")) {
+        // Load URL level.
+        let promise = getJSON(code.slice(1));
+        promise.then(loadLevel, e => {
+            alert("Couldn't get level from URL!");
+            console.error("Error while getting level data", e);
+        })
+    } else if (typeof code === "string" && code.startsWith("$")) {
+        switch (code.slice(1).toLowerCase()) {
+            case "random":
+                const link = RANDOM_LEVEL_GEN_LINK;
+                getJSON(link).then(loadLevel);
+                break;
+            default:
+                alert("That is not a valid special level!");
+                console.error("Invalid special level", code.slice(1));
+        }
+    } else if (typeof code === "string" && code.startsWith("#") && SERVER_API) {
+        // Load server level.
+        serverWorker.search(code)
+                    .then(levels => {
+                        if (!levels[0]) throw new Error("That level doesn't exist in the server.");
+                        loadLevel(levels[0]);
+                    })
+                    .catch(e => {
+                        alert("The level couldn't be loaded/found.");
+                        console.error("Level couldn't be loaded/found", e);
+                    });
+    } else try {
+        const level: Level = typeof code === "string" ? JSON.parse(code) : code;
         TILES_WIDTH = Math.max(+or(level.width, 22), 3);
         TILES_HEIGHT = Math.max(+or(level.height, 16), 3);
         SIDE_LENGTH = getNewTileSide();
@@ -289,7 +484,7 @@ function loadLevel(code?: string) {
                 x = 0;
                 return Y.map((t: string | number) => {
                     if (t === 0) return Block.AIR;
-                    const id = codes.find(i => blockCodes[i] == t) || (()=>{
+                    const id = codes.find(i => blockCodes[i] == t) || (() => {
                         throw new Error(`Invalid ID '${t}' found at ${x},${y},${z}`)
                     })();
                     x++;
@@ -302,7 +497,7 @@ function loadLevel(code?: string) {
         DIMENSIONS = tiles.length;
         FRICTION = +or(level.friction, 0.025);
         CUSTOM_MAX = or(level.max, {});
-    } catch(e) {
+    } catch (e) {
         alert("Level could not be loaded! More information in the logs can be found.");
         console.error("Error while loading level:", e);
     }
@@ -372,6 +567,8 @@ function tick(): void {
     if (!EMBED) drawToolbox();
     drawCounters();
 
+    if (serverMenu) drawServerMenu();
+
     showAlerts();
 
     doPhysics(deltaTime);
@@ -403,8 +600,8 @@ function drawCounters(): void {
         let max = e?.getMax;
         if (typeof max === "function") max = max();
 
-        if (e.shown && (isPlaying ? (typeof np !== "undefined" ? np : COUNTER["max_" + counter + "s"] > 0) : (typeof np !== "undefined" ? np : tilesContain(blockTable[counter])) ))
-            drawCounter(e.icon || "block" + counter, blockTable[counter], "current_" + counter + "s", "max_" + counter + "s", e.colour, e.dark_colour, max);   
+        if (e.shown && (isPlaying ? (typeof np !== "undefined" ? np : COUNTER["max_" + counter + "s"] > 0) : (typeof np !== "undefined" ? np : tilesContain(blockTable[counter]))))
+            drawCounter(e.icon || "block" + counter, blockTable[counter], "current_" + counter + "s", "max_" + counter + "s", e.colour, e.dark_colour, max);
     }
 
     function drawCounter(name: string, block: Block, CURRENT: string, MAX: string, colour: string, dark_colour: string, maxCount?: number) {
@@ -419,7 +616,7 @@ function drawCounters(): void {
             ctx.strokeStyle = dark_colour;
             ctx.lineWidth = 3;
             ctx.stroke();
-            c -= 0.35+0.275;
+            c -= 0.35 + 0.275;
         }
         let PROG = COUNTER[CURRENT] + "/" + COUNTER[MAX];
         if (!tick) {
@@ -427,20 +624,20 @@ function drawCounters(): void {
             if (!isPlaying) {
                 PROG = (maxCount || tilesCount(block)) + "";
             } else if (COUNTER[MAX] <= 1) {
-                PROG = "";  
+                PROG = "";
                 c -= 0.275;
             } else if (COUNTER[MAX] >= 100) {
                 PROG = Math.floor(COUNTER[CURRENT] / COUNTER[MAX] * 100) + "%";
             }
-            if (PROG.length > 1) c += 0.275*(PROG.length - 1);
+            if (PROG.length > 1) c += 0.275 * (PROG.length - 1);
             drawText(PROG, pos[0] + 30, pos[1], colour, true, dark_colour);
         }
     }
 }
 
-function drawText(text: string, x: number, y: number, colour?: string, top?: boolean, stroke?: string, centered?: boolean, size?: number) {
+function drawText(text: string, x: number, y: number, colour?: string, top?: boolean, stroke?: string, centered?: boolean, size?: number, right?: boolean) {
     ctx.font = `${size || 32}px "Noto Sans"`;
-    ctx.textAlign = centered ? 'center' : 'left';
+    ctx.textAlign = right ? 'right' : (centered ? 'center' : 'left');
     ctx.textBaseline = top ? 'top' : 'middle';
     if (stroke) {
         ctx.strokeStyle = stroke;
@@ -459,7 +656,7 @@ function isColliding(): boolean {
             const ax = rx + x + 1, ay = ry + y + 1;
             const block = getTile(ax, ay);
             const dx = PLAYER_POS[0] - ax + 1, dy = PLAYER_POS[1] - ay + 1;
-            const touching = (Math.abs(dx) + (1 - PLAYER_SIZE)/2) < TOUCH_FRAC - MINI_NUM && (Math.abs(dy) + (1 - PLAYER_SIZE)/2) < TOUCH_FRAC - MINI_NUM;
+            const touching = (Math.abs(dx) + (1 - PLAYER_SIZE) / 2) < TOUCH_FRAC - MINI_NUM && (Math.abs(dy) + (1 - PLAYER_SIZE) / 2) < TOUCH_FRAC - MINI_NUM;
 
             if (touching)
                 handleExtraThings(block, ax - 1, ay - 1);
@@ -506,6 +703,7 @@ function stopPlaying() {
 }
 
 function finishLevel() {
+    verified = true;
     if (EMBED) {
         justPause = true;
         if (confirm("Congratulations! You finished the level! Would you like to play again?")) {
@@ -603,7 +801,7 @@ function showAlert(alert: string) {
 
 function teleportToOut(type: string) {
     const outs: [number, number, number][] = [].concat(
-        tilePositions(blockTable[type + "_out"]), 
+        tilePositions(blockTable[type + "_out"]),
         (COUNTER["current_" + type + "s"] < COUNTER["max_" + type + "s"]) ? [] : tilePositions(blockTable[type + "_out_lock"])
     );
     if (outs.length >= 1) {
@@ -689,7 +887,7 @@ function doPhysics(dt: number) {
 
 function getNewTileSide(): number {
     const side = Math.min(HEIGHT / TILES_HEIGHT, (WIDTH - TOOLBOX_WIDTH) / TILES_WIDTH);
-    TILE_OFFSET = [(WIDTH - TOOLBOX_WIDTH - side*TILES_WIDTH) / 2, (HEIGHT - side*TILES_HEIGHT) / 2];
+    TILE_OFFSET = [(WIDTH - TOOLBOX_WIDTH - side * TILES_WIDTH) / 2, (HEIGHT - side * TILES_HEIGHT) / 2];
     return side;
 }
 
@@ -779,7 +977,7 @@ function drawTiles() {
             const texName = getTextureName(getTile(x, y), x - 1, y - 1);
             if (!texName) continue;
             if (texName == "block_player") {
-                drawTexture(texName, TILE_OFFSET[0] + x * SIDE_LENGTH + TOOLBOX_WIDTH + (1 - PLAYER_SIZE) * SIDE_LENGTH /  2, TILE_OFFSET[1] + y * SIDE_LENGTH + (1 - PLAYER_SIZE) * SIDE_LENGTH / 2, SIDE_LENGTH * PLAYER_SIZE, SIDE_LENGTH * PLAYER_SIZE);
+                drawTexture(texName, TILE_OFFSET[0] + x * SIDE_LENGTH + TOOLBOX_WIDTH + (1 - PLAYER_SIZE) * SIDE_LENGTH / 2, TILE_OFFSET[1] + y * SIDE_LENGTH + (1 - PLAYER_SIZE) * SIDE_LENGTH / 2, SIDE_LENGTH * PLAYER_SIZE, SIDE_LENGTH * PLAYER_SIZE);
             } else {
                 drawTexture(texName, TILE_OFFSET[0] + x * SIDE_LENGTH + TOOLBOX_WIDTH, TILE_OFFSET[1] + y * SIDE_LENGTH, SIDE_LENGTH, SIDE_LENGTH);
             }
@@ -809,12 +1007,12 @@ function drawToolbox() {
     const [PLAY_W, PLAY_H] = [27 * 3, 54 * 3];
     hasPlayer = tilesContain(Block.PLAYER);
     drawTexture(hasPlayer ? (isPlaying ? "pause" : "play") : "locked_play", (TOOLBOX_WIDTH - PLAY_W) * 0.25, HEIGHT - (PLAY_H + 10), PLAY_W, PLAY_H);
-    
+
     if (DIMENSIONS > 1) {
         drawTexture("left_triangle", TOOLBOX_WIDTH - 48 - 24 - 24, HEIGHT - 48 - 12, 22, 48);
         drawTexture("tilemap", TOOLBOX_WIDTH - 48 - 24, HEIGHT - 48 - 12, 44, 48);
         drawTexture("right_triangle", TOOLBOX_WIDTH - 48 - 24 + 46, HEIGHT - 48 - 12, 22, 48);
-        drawText((tileDimension + 1) + "", TOOLBOX_WIDTH - 48 - 24 + 44/2, HEIGHT - 48 - 12 + 48/2, "#272727", false, "#eeeeee", true, 40);
+        drawText((tileDimension + 1) + "", TOOLBOX_WIDTH - 48 - 24 + 44 / 2, HEIGHT - 48 - 12 + 48 / 2, "#272727", false, "#eeeeee", true, 40);
     }
 
     drawTexture("load_down", TOOLBOX_WIDTH - 90 + 7.5, HEIGHT - (PLAY_H + 10) - 18, 18, 30);
@@ -822,10 +1020,12 @@ function drawToolbox() {
 
     drawTexture("load_up", TOOLBOX_WIDTH - 40 + 7.5, HEIGHT - (PLAY_H + 10) - 18, 18, 30);
     drawTexture("load_container", TOOLBOX_WIDTH - 40, HEIGHT - (PLAY_H + 10), 36, 20);
+
+    if (SERVER_API && SERVER_DATA.canconnect) drawTexture("server", TOOLBOX_WIDTH - 40 + 15, HEIGHT - (PLAY_W + 10) - 50, 18, 30);
 }
 
 function tilesContain(block: Block) {
-    return tiles.some(d2 => d2.some(d1 => d1.some(b => b == block)));
+    return tilePosition(block).every(n => n >= 0);
 }
 
 function tilesCount(block: Block) {
@@ -918,7 +1118,7 @@ function getTile(x: number, y: number): Block {
     if (y <= 0 || y >= TILES_HEIGHT - 1 || x <= 0 || x >= TILES_WIDTH - 1) return Block.BORDER;
     try {
         return tiles[tileDimension][y - 1][x - 1];
-    } catch(e) {
+    } catch (e) {
         console.error("Tile at " + x + "," + y + " might pass the checks badly! Take note of this!", e);
         return Block.BORDER;
     }
@@ -1052,6 +1252,26 @@ function incrementCurrentCounter(id: string, decrement?: boolean) {
 
 function setCurrentCounter(id: string, value: number) {
     COUNTER["current_" + id + "s"] = value;
+}
+
+function getJSON(url: string) {
+    return new Promise((resolve, reject) => {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.responseType = 'json';
+        xhr.onload = function() {
+            if (xhr.responseURL == url) {
+                if (xhr.status === 200) {
+                    resolve(xhr.response);
+                } else {
+                    reject(xhr.response);
+                }
+            } else {
+                getJSON(xhr.responseURL).then(resolve);
+            }
+        };
+        xhr.send();
+    });
 }
 
 init();

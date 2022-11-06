@@ -10,6 +10,12 @@ type TemporaryObject = {
     blockCodes: {[key: string]: string | number}
 };
 
+import GravityLocks from "./mods/gravity_locks";
+
+const vanillaMods = [
+    GravityLocks
+];
+
 let atlasNum = 0;
 let blockID = -1;
 
@@ -17,7 +23,14 @@ let temp: TemporaryObject;
 
 async function loadMods(mods: string[], orig: TemporaryObject) {
     temp = orig;
+    loadVanillaMods();
     return Promise.all(mods.map(loadMod)).then(() => temp);
+}
+
+function loadVanillaMods() {
+    for (let vmod of vanillaMods) {
+       registerModClass(vmod);
+    }
 }
 
 async function loadMod(mod: string): Promise<void> {
