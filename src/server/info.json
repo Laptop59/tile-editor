@@ -1,4 +1,7 @@
 {
     "title": "Tile Editor's Local Server",
-    "colour": "#66dfaa"
+    "colour": "#66dfaa",
+    "welcome": "Welcome to the server, %user%!",
+    "version": "DEV",
+    "allowed": "*"
 }

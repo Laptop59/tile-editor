@@ -16,9 +16,12 @@ import SOUND_CHECKPOINT from "./audio/checkpoint.mp3";
 import SOUND_COLLECT from "./audio/collect.mp3";
 
 // Util
-import { handleKey, HELD, getParameter, or, copyToClipboard, convertToBlockCodes, Level, ServerData, SMM } from "./util";
+import { handleKey, HELD, getParameter, or, copyToClipboard, convertToBlockCodes, Level, ServerLevel, ServerData, SMM, PreviewServerLevel } from "./util";
 import loadMods from "./mods";
 import ServerWorker from "./server";
+
+// Version
+const version = require("../package.json").version;
 
 let blockTable = BlockTable;
 let blockCodes = BlockCodes;
@@ -56,7 +59,13 @@ const SOUNDS: { [key: string]: string } = {
 let ELEM_SOUNDS: { [key: string]: HTMLAudioElement } = {};
 const RANDOM_LEVEL_GEN_LINK = "https://api.json-generator.com/templates/cNAIgnNeUl-I/data?access_token=hotdm6zkrfdiamtmc2ah4pnxoftlqvjd2mn8jm4q";
 const SERVER_API = getParameter("server") || null;
-let serverWorker = SERVER_API ? new ServerWorker(SERVER_API, () => SERVER_DATA.canconnect = true) : null;
+let serverWorker = SERVER_API ? new ServerWorker(SERVER_API, version, () => {
+    SERVER_DATA.canconnect = true;
+    if (!serverWorker.work) return;
+    return function (username: string) {
+        SERVER_DATA.username = username
+    };
+}) : null;
 let SERVER_DATA: ServerData = {};
 
 let SERVER_MENU_MODE: SMM = SMM.NONE;
@@ -136,6 +145,7 @@ function init() {
     canvas.addEventListener("mousedown", click);
     document.addEventListener("keydown", (e: KeyboardEvent) => restartLevel(handleKey(true, e)));
     document.addEventListener("keyup", (e: KeyboardEvent) => restartLevel(handleKey(false, e)));
+    attemptToLoadRecoveredLevel();
     createAudios();
 
     ctx = canvas.getContext("2d");
@@ -230,6 +240,19 @@ function drawServerMenu() {
     const info = serverWorker.serverInfo();
     drawText(info.title, WIDTH/2, 100, info.colour, false, undefined, true, 40);
 
+    if (!serverWorker.work && getParameter("serverwarn") !== "skip") {
+        drawText("WARNING", WIDTH/2, 180, "yellow", false, "yellow", true, 50, false);
+        drawText("You are currently running Tile Editor " + serverWorker.formatVer(version) + ",", WIDTH/2, 240, "yellow", false, undefined, true, 35, false);
+        drawText("but the server's version is " + serverWorker.formatVer(serverWorker.serverVersion) + "!", WIDTH/2, 280, "#ffff3f", false, undefined, true, 35, false);
+
+        drawText("The server functionality for this client might not work with this server!", WIDTH/2, 320, "#ffff5f", false, undefined, true, 32.5, false);
+
+        drawText("If you want to continue anyway, press the button below.", WIDTH/2, HEIGHT - 230, "white", false, undefined, true, 35, false);
+        drawRect(WIDTH/2 - 100, HEIGHT - 175, 200, 75, "yellow");
+        drawText("Continue", WIDTH/2 - 100 + 200/2, HEIGHT - 175 + 75/2, "black", false, "black", true, 42, false);
+        return;
+    }
+
     switch (SERVER_MENU_MODE) {
         case SMM.MENU_NONE:
             // Load the recent levels.
@@ -266,6 +289,8 @@ function drawServerMenu() {
         case SMM.MENU_AFTER:
             drawTexture("refresh", WIDTH - 75 - 35, 75, 35, 45);
             drawTexture("search", WIDTH - 75 - 85 - 60, 75, 45, 45);
+            drawTexture("user", WIDTH - 75 - 85 - 60 - 60, 75, 45, 45);
+            SERVER_DATA.username && drawText(serverWorker.welcome.split("%user%").join(serverWorker.username), WIDTH/2, 130, serverWorker.colour, false, undefined, true, 30, false);
 
             if (!serverWorker.cooldownSubmit()) drawTexture("upload", WIDTH - 75 - 85, 75, 45, 45);
             if (SERVER_DATA.recentdata.length <= 0) {
@@ -280,12 +305,15 @@ function drawServerMenu() {
 
             for (let level of SERVER_DATA.recentdata.slice(s, s + 5)) {
                 drawRect(80, 150 + i * 80, WIDTH - 200, 65, "white");
-                drawText(serverWorker.shorten(level.title || "Level"), 80 + 10, 150 + 5 + i * 80, "#222222", true, undefined, false, 39);
-                drawText(serverWorker.shorten(level.author || "Unknown"), 80 + 10, 150 + 40 + i * 80, "#222222", true, undefined, false, 25);
+                const col = level.owner ? "#005534" : "#222222";
+                drawText(serverWorker.shorten(level.title || "Level"), 80 + 10, 150 + 5 + i * 80, col, true, undefined, false, 39);
+                drawText(serverWorker.shorten(level.owner || level.author || "Unknown"), 80 + 10, 150 + 40 + i * 80, col, true, undefined, false, 25);
                 drawText(serverWorker.levelSize(level), WIDTH - 120 - 10, 150 + 5 + i * 80, "#222222", true, undefined, false, 30, true);
                 drawText(serverWorker.formatViews(level), WIDTH - 120 - 40 + 10, 150 + 5 + i * 80 + 65/2 - 5, "#222222", true, undefined, false, 30, true);
                 if (level.verified) drawTexture("verified", WIDTH - 140, 120 + i * 80, 60, 50);
                 drawTexture("plays", WIDTH - 120 - 30, 150 + 5 + i * 80 + 65/2 - 5, 35*0.75, 40*0.75);
+                drawTexture("loves", WIDTH - 120 - 30 - 280, 150 + 5 + i * 80 + 65/2 - 5, 35*0.75, 40*0.75);
+                drawText(serverWorker.formatLoves(level), WIDTH - 120 - 40 + 15 + 35*0.75 - 280, 150 + 5 + i * 80 + 65/2 - 5, "#7f0000", true, undefined, false, 30, false);
                 i++;
             }
             drawTexture("left_arrow", WIDTH/2 - 50 - 50, HEIGHT - 127, 50, 50);
@@ -315,17 +343,50 @@ function drawServerMenu() {
             drawText("Upload successful.", WIDTH/2, HEIGHT/2, "white", false, undefined, true, 40);
             drawText("ID: " + SERVER_DATA.levelid, WIDTH/2, HEIGHT/2 + 30, "#bdbdbd", false, undefined, true, 33.5);
             break;
+        case SMM.LEVEL:
+            const level = SERVER_DATA.levelpage;
+            const col = level.owner ? "#003317" : "#222222";
+            drawRect(80, 140, WIDTH - 160, HEIGHT - 250, "#dddddd");
+            drawText(level.title, 100, 150, col, true, "#222222", false, 39);
+            drawText("ID " + level.id, WIDTH - 87.5, 145, col, true, undefined, false, 27.5, true);
+            if (level.verified) drawText("Verified", WIDTH - 87.5, 172.5, "#007700", true, "#007700", false, 27.5, true);
+            else drawText("Unverified", WIDTH - 87.5, 172.5, "#002200", true, undefined, false, 27.5, true);
+            drawText("By " + level.owner || level.author || "Unknown", 100, 200, col, true, "#272727", false, 25);
+            
+            let grd = ctx.createLinearGradient(0, 0, (WIDTH - 240) * 0.65, 0);
+            grd.addColorStop(0, "#e7e7e7");
+            grd.addColorStop(1, "#dddddd");
+
+            drawRect(90, 230, WIDTH - 240, 120, grd);
+            drawTexture("plays", 100, 240, 40, 40);
+            drawText(serverWorker.formatViewsInFull(level), 155, 261, "#222222", false, "#222222", false, 42, false);
+            drawTexture("loves", 100, 290, 40, 40);
+            drawText(serverWorker.formatLovesInFull(level), 155, 261+50, "#dd0000", false, "#dd0000", false, 42, false);
+            drawRect(WIDTH/2 - 100, HEIGHT - 225, 200, 75, "#22dd22");
+            drawText("Play", WIDTH/2 - 100 + 200/2, HEIGHT - 225 + 75/2, "white", false, "white", true, 42, false);
+            if (SERVER_DATA.username && SERVER_DATA.loved !== null) {
+                if (SERVER_DATA.loved) drawTexture("loves", 100, 360-1, 40, 40);
+                drawTexture("loves_outline", 100, 360, 40, 40);
+                drawText(SERVER_DATA.loved ? "Loved" : "Love", 150, 380, "#7f0000", false, SERVER_DATA.loved && "#700000", false, 42, false);
+            }
+            break;
     }
 }
 
 function handleClickServer(x: number, y: number) {
     if (x >= 75 && x <= 110 && y >= 75 && x <= 110) {
+        if (SERVER_MENU_MODE === SMM.LEVEL) {
+            SERVER_MENU_MODE = SMM.MENU_AFTER;
+            return;
+        }
         serverMenu = false;
-    } else if (SERVER_DATA.page + 1 < Math.ceil(SERVER_DATA.recentdata.length/5) && x >= WIDTH/2 + 100 - 50 && x <= WIDTH/2 + 100 && y >= HEIGHT - 127 && y <= HEIGHT - 127 + 50) {
+    } else if (!serverWorker.work && x >= WIDTH/2 - 100 && x <= WIDTH/2 + 100 && y >= HEIGHT - 175 && y <= HEIGHT - 100) {
+        serverWorker.work = true;
+    } else if (SERVER_MENU_MODE === SMM.MENU_AFTER && SERVER_DATA.page + 1 < Math.ceil(SERVER_DATA.recentdata.length/5) && x >= WIDTH/2 + 100 - 50 && x <= WIDTH/2 + 100 && y >= HEIGHT - 127 && y <= HEIGHT - 127 + 50) {
         SERVER_DATA.page++;
-    } else if (SERVER_DATA.page >= 1 && x >= WIDTH/2 - 50 - 50 && x <= WIDTH/2 - 50 && y >= HEIGHT - 127 && y <= HEIGHT - 127 + 50) {
+    } else if (SERVER_MENU_MODE === SMM.MENU_AFTER && SERVER_DATA.page >= 1 && x >= WIDTH/2 - 50 - 50 && x <= WIDTH/2 - 50 && y >= HEIGHT - 127 && y <= HEIGHT - 127 + 50) {
         SERVER_DATA.page--;
-    } else if (x >= WIDTH - 75 - 35 && x <= WIDTH - 35 && y >= 35 && y <= 35 + 45) {
+    } else if (SERVER_MENU_MODE === SMM.MENU_AFTER && x >= WIDTH - 75 - 35 && x <= WIDTH - 35 && y >= 75 && y <= 75 + 45) {
         SERVER_DATA.recentdata = undefined;
         SERVER_MENU_MODE = SMM.MENU_NONE;
     } else if (SERVER_MENU_MODE === SMM.MENU_AFTER && x >= WIDTH - 75 - 85 - 60 && y >= 75 && x <= WIDTH - 75 - 85 - 60 + 45 && y <= 75 + 45) {
@@ -334,26 +395,95 @@ function handleClickServer(x: number, y: number) {
 
         SERVER_DATA.query = query;
         SERVER_MENU_MODE = SMM.QUERY_NONE;
+    } else if (SERVER_MENU_MODE === SMM.LEVEL && x >= WIDTH/2 - 100 && x <= WIDTH/2 + 100 && y >= HEIGHT - 225 && y <= HEIGHT - 150) {
+        serverWorker.play(SERVER_DATA.levelpage.id).then(loadLevel).then(() => serverMenu = false);
+    } else if (serverWorker.canLove() && SERVER_MENU_MODE === SMM.LEVEL && SERVER_DATA.username && SERVER_DATA.loved !== null && x >= 100 && x <= 140 && y >= 360 && y <= 400) {
+        SERVER_DATA.loved = !SERVER_DATA.loved
+        SERVER_DATA.levelpage.loves += SERVER_DATA.loved ? 1 : -1;
+        serverWorker.loveLevel(SERVER_DATA.levelpage.id, !SERVER_DATA.loved);
     } else if (SERVER_MENU_MODE === SMM.MENU_AFTER && !serverWorker.cooldownSubmit() && x >= WIDTH - 75 - 85 && x <= WIDTH - 75 - 85 + 45 && y >= 75 && y <= 75+45) {
         // Ask
         const name = prompt("Title:");
         if (!name) return;
-        const author = prompt("Author:");
-        if (!author) return;
+        const author = SERVER_DATA.username || prompt("Author:");
+        if (!SERVER_DATA.username && !author) return;
 
-        let submittedlevel = saveLevel(true) as Level;
+        let submittedlevel = saveLevel(true) as ServerLevel;
         submittedlevel.title = name;
         submittedlevel.author = author;
         
         SERVER_MENU_MODE = SMM.SUBMIT_NONE;
         SERVER_DATA.leveldata = submittedlevel;
+    } else if (SERVER_MENU_MODE == SMM.MENU_AFTER && x >= WIDTH - 75 - 85 - 60 - 60 && y >= 75 && x <= WIDTH - 75 - 85 + 45 - 60 && y <= 75 + 45) {
+        if (SERVER_DATA.username) {
+            if (confirm("Do you want to sign out?")) {
+                document.cookie = "token=;expires=" + new Date(0).toUTCString() + ";path=/";
+                saveAndReload();
+            }
+            return;
+        }
+        
+        if (confirm("Do you want to make use of an account?")) {
+            const option = confirm("Select `OK` to login, and `Cancel` to signup.");
+            if (option) {
+                const name = prompt("User's name:");
+                if (!name) return;
+                const password = prompt("User's password:");
+                if (!password) return;
+                serverWorker.login(name, password).then(token => {
+                    if (!token) {
+                        alert("Failed to login.")
+                        return;
+                    } else {
+                        let expires = new Date();
+                        expires.setTime(expires.getTime() + 7*86400*1000);
+                        // Store our token
+                        document.cookie = "token=" + token + ";expires=" + expires.toUTCString() + ";path=/";
+                        SERVER_DATA.username = name;
+                        alert("Successfully logged in to your account. Reloading...");
+                        saveAndReload();
+                    }
+                })
+            } else {
+                const name = prompt("User's name:");
+                if (!name) return;
+                const password = prompt("User's password:");
+                if (!password) return;
+                if (password.length < 8 || password.length > 20) {
+                    alert("Passwords must have at least 8 characters and no more than 20!");
+                    return;
+                }
+                const confirm_pass = prompt("Confirm password:");
+                if (password === confirm_pass) {
+                    // Use the worker.
+                    serverWorker.register(name, password).then(token => {
+                        if (!token) {
+                            alert("Failed to register. Maybe the user name is already registered?")
+                            return;
+                        } else {
+                            let expires = new Date();
+                            expires.setTime(expires.getTime() + 7*86400*1000);
+                            // Store our token
+                            document.cookie = "token=" + token + ";expires=" + expires.toUTCString() + ";path=/";
+                            SERVER_DATA.username = name;
+                            alert("Successfully registered. Reloading...");
+                            saveAndReload();
+                        }
+                    }); 
+                } else {
+                    alert("Passwords do not match!");
+                    return;
+                }
+            }
+        }
     } else if (SERVER_MENU_MODE === SMM.MENU_AFTER && x >= 80 && x <= 80 + WIDTH - 200) {
         let s = SERVER_DATA.page * 5, i=0;
         for (let level of SERVER_DATA.recentdata.slice(s, s + 5)) {
             if (y >= 150 + i * 80 && y <= 215 + i * 80) {
-                serverMenu = false;
-                serverWorker.play(level.id);
-                loadLevel(level);
+                SERVER_DATA.levelpage = level;
+                SERVER_MENU_MODE = SMM.LEVEL;
+                SERVER_DATA.loved = null;
+                serverWorker.isLoved(level.id).then(l => SERVER_DATA.loved = l);
             }
             i++;
         }
@@ -367,7 +497,7 @@ function handleClick(x: number, y: number): void {
         if (shouldLock(slotSelected)) return; // Don't allow to place more!
         const tx = Math.floor((x - TOOLBOX_WIDTH - TILE_OFFSET[0]) / SIDE_LENGTH) - 1;
         const ty = Math.floor((y - TILE_OFFSET[1]) / SIDE_LENGTH) - 1;
-        if (tx < 0 || tx > TILES_WIDTH - 2 || ty < 0 || ty > TILES_HEIGHT - 2) return;
+        if (tx < 0 || tx >= TILES_WIDTH - 2 || ty < 0 || ty >= TILES_HEIGHT - 2) return;
         const type = palette[slotSelected][0];
         tiles[tileDimension][ty][tx] = blockTable[type];
         verified = false;
@@ -412,7 +542,7 @@ function handleClick(x: number, y: number): void {
     }
 }
 
-function saveLevel(returnLevel?: boolean): Level | void {
+function saveLevel(returnLevel?: boolean): ServerLevel | void {
     let level: Level = {
         width: TILES_WIDTH,
         height: TILES_HEIGHT,
@@ -422,8 +552,9 @@ function saveLevel(returnLevel?: boolean): Level | void {
         mods
     };
     if (returnLevel) {
-        level.verified = verified;
-        return level;
+        let serverlevel = level as ServerLevel;
+        serverlevel.verified = verified;
+        return serverlevel;
     } else {
         copyToClipboard(JSON.stringify(level));
         showAlert("Code has been copied to your clipboard!");
@@ -436,7 +567,7 @@ function loadLevel(code?: string | Level) {
     if (!code) return;
     if (typeof code === "string" && code.startsWith("*")) {
         // Sample level.
-        import(`./levels/${code.slice(1)}.json`)
+        import(/* webpackMode: "eager" */ `./levels/${code.slice(1)}.json`)
             .then(loadLevel)
             .catch(e => {
                 alert("That is not a valid sample level!")
@@ -464,7 +595,7 @@ function loadLevel(code?: string | Level) {
         serverWorker.search(code)
                     .then(levels => {
                         if (!levels[0]) throw new Error("That level doesn't exist in the server.");
-                        loadLevel(levels[0]);
+                        serverWorker.play(levels[0].id).then(loadLevel);
                     })
                     .catch(e => {
                         alert("The level couldn't be loaded/found.");
@@ -915,7 +1046,7 @@ function restartLevel(reset: boolean) {
     }
 }
 
-function drawRect(x: number, y: number, w: number, h: number, color: string) {
+function drawRect(x: number, y: number, w: number, h: number, color: string | CanvasGradient | CanvasPattern) {
     ctx.beginPath();
     ctx.rect(x, y, w, h);
     ctx.fillStyle = color;
@@ -1274,6 +1405,27 @@ function getJSON(url: string) {
     });
 }
 
+function attemptToSaveLevel() {
+    console.log("Saving level...")
+    // Save current workspace.
+    let level = saveLevel(true) as ServerLevel;
+    delete level.verified;
+    const data = JSON.stringify(level);
+    sessionStorage.setItem("level", data);
+}
+
+function attemptToLoadRecoveredLevel() {
+    let level = sessionStorage.getItem("level");
+    if (!level) return;
+    try {
+        let recovered = JSON.parse(level) as Level;
+        loadLevel(recovered);
+        sessionStorage.removeItem("level");
+    } catch(e) {
+        console.warn("Unable to load recovered level.", e);
+    }
+}
+
 init();
 
 export {
@@ -1289,3 +1441,8 @@ export {
     incrementCurrentCounter, setCurrentCounter,
     playSound
 };
+
+function saveAndReload() {
+    attemptToSaveLevel();
+    window.location.replace(window.location.href);
+}
