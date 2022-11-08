@@ -1,7 +1,9 @@
 const path = require('path');
+
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyPlugin = require("copy-webpack-plugin");
 const ZipWebpackPlugin = require("zip-webpack-plugin");
+
 const version = require("./package.json").version;
 
 module.exports = {
@@ -34,14 +36,25 @@ module.exports = {
     new CopyPlugin({
       patterns: [
         { from: "./src/mods", to: "mods" },
-        { from: "./src/server", to: "server"},
+        { from: "./src/server", to: "server", globOptions: {
+            ignore: ["**/data.json", "**/data_old.json", "**/info.json"]
+        }},
+        { from: "./src/server/info.json",
+          to: "server/info.json",
+          transform(content) {
+            content = JSON.parse(content);
+            delete content.allowed;
+            content.version = version;
+            return JSON.stringify(content, null, 4);
+          }
+        },
         { from: "./src/levels/LEVELS.md", to: "LEVELS.md"}
       ],
     }),
     new ZipWebpackPlugin({
       path: "zip",
       filename: `tile-editor-v${version}.zip`
-    })
+    }),
   ],
   resolve: {
     extensions: ['.tsx', '.ts', '.js'],

@@ -40,17 +40,32 @@ function handleKey(down: boolean, e: KeyboardEvent): boolean {
 interface Level {
     width: number,
     height: number,
-    tiles: (string | number)[][][],
+    tiles: ( (string | number)[][] | null )[],
     friction?: number,
     max?: {[key: string]: number},
-    mods?: string[],
+    mods?: string[]
+}
 
-    // This is exclusive to server-levels.
+interface ServerLevel extends Level {
     title?: string,
     author?: string,
     plays?: number,
     id?: number,
-    verified?: boolean
+    verified?: boolean,
+    owner?: string
+}
+
+interface PreviewServerLevel {
+    title: string,
+    author: string,
+    plays: number,
+    id: number,
+    verified: boolean,
+    owner: string,
+    width: number,
+    height: number,
+    dimensions: number,
+    loves: number
 }
 
 /**
@@ -100,12 +115,15 @@ function isEmptyStringDimension(dimension: (string | number)[][]): boolean {
 };
 
 interface ServerData {
-    recentdata?: Level[],
+    recentdata?: PreviewServerLevel[],
     page?: number,
-    leveldata?: Level,
+    leveldata?: ServerLevel,
     levelid?: number,
+    levelpage?: PreviewServerLevel,
     query?: string,
-    canconnect?: boolean
+    canconnect?: boolean,
+    username?: string,
+    loved?: boolean
 }
 
 enum SMM { // Server Menu Modes
@@ -120,6 +138,8 @@ enum SMM { // Server Menu Modes
     SUBMIT_AFTER,
     SUBMIT_ERROR,
 
+    LEVEL,
+
     QUERY_NONE
 }
 
@@ -130,6 +150,8 @@ export {
     copyToClipboard,
     convertToBlockCodes,
     Level,
+    ServerLevel,
+    PreviewServerLevel,
     ServerData,
     SMM
 }
