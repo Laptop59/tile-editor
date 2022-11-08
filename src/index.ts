@@ -59,14 +59,14 @@ const SOUNDS: { [key: string]: string } = {
 let ELEM_SOUNDS: { [key: string]: HTMLAudioElement } = {};
 const RANDOM_LEVEL_GEN_LINK = "https://api.json-generator.com/templates/cNAIgnNeUl-I/data?access_token=hotdm6zkrfdiamtmc2ah4pnxoftlqvjd2mn8jm4q";
 const SERVER_API = getParameter("server") || null;
+
+let SERVER_DATA: ServerData = {};
+
 let serverWorker = SERVER_API ? new ServerWorker(SERVER_API, version, () => {
     SERVER_DATA.canconnect = true;
-    if (!serverWorker.work) return;
-    return function (username: string) {
-        SERVER_DATA.username = username
-    };
+}, username => {
+    SERVER_DATA.username = username;
 }) : null;
-let SERVER_DATA: ServerData = {};
 
 let SERVER_MENU_MODE: SMM = SMM.NONE;
 
@@ -351,7 +351,7 @@ function drawServerMenu() {
             drawText("ID " + level.id, WIDTH - 87.5, 145, col, true, undefined, false, 27.5, true);
             if (level.verified) drawText("Verified", WIDTH - 87.5, 172.5, "#007700", true, "#007700", false, 27.5, true);
             else drawText("Unverified", WIDTH - 87.5, 172.5, "#002200", true, undefined, false, 27.5, true);
-            drawText("By " + level.owner || level.author || "Unknown", 100, 200, col, true, "#272727", false, 25);
+            drawText("By " + (level.owner || level.author || "Unknown"), 100, 200, col, true, "#272727", false, 25);
             
             let grd = ctx.createLinearGradient(0, 0, (WIDTH - 240) * 0.65, 0);
             grd.addColorStop(0, "#e7e7e7");
